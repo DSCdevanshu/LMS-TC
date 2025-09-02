@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using TCBackend.Authorization;
@@ -14,7 +15,7 @@ namespace TCBackend.Controllers.Employee
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
+    //[Authorize]
     public class EmpAuthorityController : ControllerBase
     {
         private readonly TCDbContext _context;
@@ -129,11 +130,27 @@ namespace TCBackend.Controllers.Employee
             var res = await _context.DepartmentMaster.ToListAsync();
             return Ok(res);
         }
-        [HttpGet("getEmployeeList")]
+
+        [HttpGet("getAllEmployeeList")]
+        [HasPermission("employees.list.all")]
         public async Task<IActionResult> EmployeeList()
         {
             var res = await _context.vw_EmpList.ToListAsync();
             return Ok(res);
+        }
+
+        [HttpGet("my-team")]
+        public async Task<IActionResult> GetMyTeam()
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+            var userIdParam = new SqlParameter("@TopLevelUserId", userId);
+
+            var teamList = await _context.vw_EmpList
+                .FromSqlRaw("EXEC sp_GetEmployeeHierarchy @TopLevelUserId", userIdParam)
+                .ToListAsync();
+
+            return Ok(teamList);
         }
 
         [HttpGet("getAuthDepartmentList")]
@@ -168,17 +185,12 @@ namespace TCBackend.Controllers.Employee
                 .OrderBy(m => m.DisplayOrder)
                 .ToListAsync();
 
-            // Filter the menu items
             var accessibleMenu = allMenuItems.Where(item =>
-                    // Item is public (no permission required)
                     item.RequiredPermissionId == null ||
-                    // Or user is Super Admin
                     isSuperAdmin ||
-                    // Or user has the specific permission required
                     userPermissions.Contains(item.RequiredPermissionId.Value)
                 ).ToList();
 
-            // (Optional) Here you could add logic to structure the list into a nested/hierarchical format if you have ParentId set.
 
             return Ok(accessibleMenu);
         }

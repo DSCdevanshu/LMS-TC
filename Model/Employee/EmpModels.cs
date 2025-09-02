@@ -8,22 +8,23 @@ namespace TCBackend.Model.Employee
     public class vwEmpList
     {
         [Key]
-        public int EmpId { get; set; }
-        public string EmpCode { get; set; }
-        public string FirstName { get; set; }
+        public int UserId { get; set; }
+        public string? EmpCode { get; set; }
+        public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
         public string? FathersName { get; set; }
         public string? MothersName { get; set; }
-        public int Designation { get; set; }
-        public int Department { get; set; }
+        public DateTime? DateofBirth { get; set; }
+        public int? Designation { get; set; }
+        public string? DesignationName { get; set; }
+        public int? Department { get; set; }
         public string? Gender { get; set; }
         public string? EmailID { get; set; }
         public string? Mobile { get; set; }
         public string? Status { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime? CreatedOn { get; set; }
-        public string? ReportingTo { get; set; }
         public int? DepId { get; set; }
         public string? DepCode { get; set; }
         public string? DepartmentName { get; set; }

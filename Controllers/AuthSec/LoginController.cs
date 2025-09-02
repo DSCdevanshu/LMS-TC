@@ -61,20 +61,16 @@ namespace TCBackend.Controllers.AuthSec
                 return BadRequest("Username or email is already taken.");
             }
 
-            // 2. Create a new User object
             var user = new User
             {
                 Username = registerDto.Username,
                 Email = registerDto.Email,
-                // 3. Hash the password using BCrypt
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(registerDto.Password)
             };
 
-            // 4. Add user to the database
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            // 5. Return a success response
             return Ok(new { Message = "User registered successfully." });
         }
 
@@ -96,11 +92,6 @@ namespace TCBackend.Controllers.AuthSec
                 }
 
                 bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginDto.Password, user.PasswordHash);
-
-                if (!isPasswordValid && user.IsSuperAdmin)
-                {
-                    isPasswordValid = (user.PasswordHash == "hashed_password_super"); // Placeholder!
-                }
 
                 if (!isPasswordValid)
                 {

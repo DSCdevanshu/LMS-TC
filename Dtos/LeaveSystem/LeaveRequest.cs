@@ -1,9 +1,17 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 
-namespace TCBackend.Model.LeaveSystem
+namespace TCBackend.Dtos.LeaveSystem
 {
-    
+    public class SpLeaveRequestResult
+    {
+        public string Message { get; set; }
+        public int? LeaveRequestID { get; set; }
+        public string? ErrorMessage { get; set; }
+        public int? ErrorLine { get; set; }
+        public int? ErrorNumber { get; set; }
+    }
+
     public class LeaveRequestMaster
     {
         [Key]
@@ -41,7 +49,7 @@ namespace TCBackend.Model.LeaveSystem
         public string? DateHL { get; set; }
         public int? Frequency { get; set; }
     }
-    
+
     public class LeaveProcessItem
     {
         [Key]
@@ -70,27 +78,6 @@ namespace TCBackend.Model.LeaveSystem
         public string? ActionType { get; set; }
 
     }
-
-    [Keyless]
-    public class ModelLeaveBalance
-    {
-        public decimal? CL { get; set; }
-        public decimal? TakenCL { get; set; }
-        public decimal? BalCL { get; set; }
-        public decimal? EL { get; set; }
-        public decimal? TakenEL { get; set; }
-        public decimal? BalEL { get; set; }
-        public int? RH { get; set; }
-        public int? TakenRH { get; set; }
-        public int? BalRH { get; set; }
-        public int? SL { get; set; }
-        public int? ShBal { get; set; }
-        public int? TSL { get; set; }
-        public int? APCL { get; set; }
-        public int? APEL { get; set; }
-        public int? APSH { get; set; }
-    }
-
 
     public class CalMonth
     {

@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using TCBackend.Dtos.LeaveSystem;
 using TCBackend.Model.Employee;
-using TCBackend.Model.LeaveSystem;
 using TCBackend.Model.LoginSecurity;
 
 namespace TCBackend.Data
@@ -22,11 +22,9 @@ namespace TCBackend.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // Configure the composite primary key for UserRole
             modelBuilder.Entity<UserRole>()
                 .HasKey(ur => new { ur.UserId, ur.RoleId });
 
-            // Configure the many-to-many relationship between User and Role
             modelBuilder.Entity<UserRole>()
                 .HasOne(ur => ur.User)
                 .WithMany(u => u.UserRoles)
@@ -37,11 +35,9 @@ namespace TCBackend.Data
                 .WithMany(r => r.UserRoles)
                 .HasForeignKey(ur => ur.RoleId);
 
-            // Configure the composite primary key for RolePermission
             modelBuilder.Entity<RolePermission>()
                 .HasKey(rp => new { rp.RoleId, rp.PermissionId });
 
-            // Configure the many-to-many relationship between Role and Permission
             modelBuilder.Entity<RolePermission>()
                 .HasOne(rp => rp.Role)
                 .WithMany(r => r.RolePermissions)
@@ -66,6 +62,7 @@ namespace TCBackend.Data
         public DbSet<VW_LeaveReqGrid> sp_LeaveReqGrid { get; set; }
         public DbSet<spLeaveProcessHistory> sp_LeaveProcessHistory { get; set; }
         public DbSet<LeaveTypeMaster> LeaveTypeMaster { get; set; }
+        public DbSet<LeaveBalanceDto> LeaveBalance { get; set; }
         public DbSet<PageMaster> PageMaster { get; set; }
     }
 }

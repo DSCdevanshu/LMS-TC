@@ -14,7 +14,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddTransient<EmailService>();
-// Add services to the container.
 
 builder.Services.AddDbContext<TCDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("Constr")));
 builder.Services.AddCors(options =>
@@ -121,7 +120,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();

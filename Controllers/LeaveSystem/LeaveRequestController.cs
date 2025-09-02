@@ -3,16 +3,18 @@ using Microsoft.Data.SqlClient;
 using System.Data;
 using TCBackend.Data;
 using Microsoft.EntityFrameworkCore;
-using TCBackend.Model.LeaveSystem;
 using TCBackend.Model.Employee;
 using Microsoft.AspNetCore.Authorization;
 using TCBackend.Services;
 using System.Diagnostics;
+using TCBackend.Dtos.LeaveSystem;
+using System.Security.Claims;
+using TCBackend.Authorization;
 namespace TCBackend.Controllers.LeaveSystem
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
+    //[Authorize]
     public class LeaveRequestController : Controller
     {
         private TCDbContext _dbContext;
@@ -38,20 +40,20 @@ namespace TCBackend.Controllers.LeaveSystem
             }
             var record = new LeaveProcessItem
             {
-                ItemID=LeaveReqId,
-                ProcessID=processId,
+                ItemID = LeaveReqId,
+                ProcessID = processId,
                 ProcessBy = User.FindFirst("EmployeeCode")?.Value,
                 ProcessDate = DateTime.Now,
-                Status="A",
+                Status = "A",
                 CreatedBy = User.FindFirst("EmployeeCode")?.Value,
-                CreatedOn=DateTime.Now,
+                CreatedOn = DateTime.Now,
 
             };
             await _dbContext.LeaveProcessItem.AddAsync(record);
             leave.ProcessId = processId;
             _dbContext.LeaveRequestMaster.Update(leave);
             await _dbContext.SaveChangesAsync();
-           
+
             return Ok("Success");
         }
 
@@ -118,12 +120,12 @@ namespace TCBackend.Controllers.LeaveSystem
         public async Task<IActionResult> LeaveReqSend(int LeaveReqId)
         {
             var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-            
+
             if (leave == null)
             {
                 return NotFound("Leave request not found.");
             }
-            return await changeProcess(LeaveReqId, 2);            
+            return await changeProcess(LeaveReqId, 2);
             // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
         }
 
@@ -214,64 +216,137 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
 
-        private async Task<bool> ValidateLeaveReq(string empCode, int leaveType, DateTime startDate, DateTime endDate, string empRemarks)
-        {
-            return false;
-        }
+
 
         [HttpPost("postLeaveReqEntry")]
-        public async Task<IActionResult> LeaveReqEntry(string empCode, int leaveType, DateTime startDate, DateTime endDate, string empRemarks)
+        [HasPermission("leaves.create")]
+        public async Task<IActionResult> SubmitLeaveRequest([FromBody] CreateLeaveRequestDto requestDto)
         {
-            // Validate inputs
-            if (string.IsNullOrWhiteSpace(empCode) || empCode.Length > 10)
-            {
-                return BadRequest("Invalid employee code.");
-            }
-            if (leaveType <= 0)
-            {
-                return BadRequest("Invalid leave type.");
-            }
-            if (startDate > endDate)
-            {
-                return BadRequest("Start date must be before end date.");
-            }
-            if (string.IsNullOrWhiteSpace(empRemarks))
-            {
-                empRemarks = null; // Allow null remarks if empty
-            }
-
-            // Get loginUsr from session (or authentication context)
-            var loginUsr = User.FindFirst("EmployeeCode")?.Value;
-            var loginDepId = User.FindFirst("EmpDepId")?.Value;
+            var loginUsr = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var empCode = _dbContext.vw_EmpList.Where(id => id.UserId == requestDto.UserId).FirstOrDefaultAsync();
             
+            var parameters = new[]
+            {
+            new SqlParameter("@empCode", empCode),
+            new SqlParameter("@UserId", requestDto.UserId),
+            new SqlParameter("@leaveType", requestDto.LeaveTypeId),
+            new SqlParameter("@startDate", requestDto.StartDate),
+            new SqlParameter("@endDate", requestDto.EndDate),
+            new SqlParameter("@loginUsr", loginUsr),
+            new SqlParameter("@empRemarks", requestDto.EmpRemarks ?? (object)DBNull.Value)
+        };
+
             try
             {
-                // Execute the stored procedure with parameters
-                await _dbContext.Database.ExecuteSqlRawAsync(
-                    "EXEC sp_LeaveReqEntry @empcode, @leaveType, @startDate, @endDate, @loginUsr, @empRemarks",
-                    new SqlParameter("@empcode", empCode),
-                    new SqlParameter("@leaveType", leaveType),
-                    new SqlParameter("@startDate", startDate),
-                    new SqlParameter("@endDate", endDate),
-                    new SqlParameter("@loginUsr", loginUsr),
-                    new SqlParameter("@empRemarks", (object)empRemarks ?? DBNull.Value)
-                );
+                var results = await _dbContext.Set<SpLeaveRequestResult>()
+                    .FromSqlRaw("EXEC sp_LeaveReqEntry @empcode,@userId, @leaveType, @startDate, @endDate, @loginUsr, @empRemarks", parameters)
+                    .ToListAsync();
 
-                return Ok("Success");
+                var result = results.FirstOrDefault();
+
+                if (result == null)
+                {
+                    return StatusCode(500, "An unexpected error occurred.");
+                }
+
+                if (result.Message == "Error")
+                {
+                    return BadRequest(new { message = result.ErrorMessage });
+                }
+
+                return Ok(new { message = result.Message, leaveRequestId = result.LeaveRequestID });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
-                return StatusCode(500, "An error occurred while processing the leave request.");
+                return StatusCode(500, $"An internal server error occurred: {ex.Message}");
             }
         }
+
+
+
+        //[HttpPost("postLeaveReqEntry")]
+        //public async Task<IActionResult> LeaveReqEntry(string empCode, int leaveType, DateTime startDate, DateTime endDate, string empRemarks)
+        //{
+        //    // Validate inputs
+        //    if (string.IsNullOrWhiteSpace(empCode) || empCode.Length > 10)
+        //    {
+        //        return BadRequest("Invalid employee code.");
+        //    }
+        //    if (leaveType <= 0)
+        //    {
+        //        return BadRequest("Invalid leave type.");
+        //    }
+        //    if (startDate > endDate)
+        //    {
+        //        return BadRequest("Start date must be before end date.");
+        //    }
+        //    if (string.IsNullOrWhiteSpace(empRemarks))
+        //    {
+        //        empRemarks = null; // Allow null remarks if empty
+        //    }
+
+        //    // Get loginUsr from session (or authentication context)
+        //    var loginUsr = User.FindFirst("EmployeeCode")?.Value;
+        //    var loginDepId = User.FindFirst("EmpDepId")?.Value;
+
+        //    try
+        //    {
+        //        // Execute the stored procedure with parameters
+        //        await _dbContext.Database.ExecuteSqlRawAsync(
+        //            "EXEC sp_LeaveReqEntry @empcode, @leaveType, @startDate, @endDate, @loginUsr, @empRemarks",
+        //            new SqlParameter("@empcode", empCode),
+        //            new SqlParameter("@leaveType", leaveType),
+        //            new SqlParameter("@startDate", startDate),
+        //            new SqlParameter("@endDate", endDate),
+        //            new SqlParameter("@loginUsr", loginUsr),
+        //            new SqlParameter("@empRemarks", (object)empRemarks ?? DBNull.Value)
+        //        );
+
+        //        return Ok("Success");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine($"Error: {ex.Message}");
+        //        return StatusCode(500, "An error occurred while processing the leave request.");
+        //    }
+        //}
+
+
+        [HttpGet("my-balance")]
+        public async Task<IActionResult> GetMyLeaveBalance()
+        {
+            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdString, out var userId))
+            {
+                return Unauthorized("User ID not found in token.");
+            }
+
+            var leaveBalance = await _dbContext.LeaveBalance
+                .FirstOrDefaultAsync(lb => lb.UserId == userId);
+
+            if (leaveBalance == null)
+            {
+                return NotFound("Leave balance not found for this user.");
+            }
+
+            var leaveBalanceDto = new LeaveBalanceDto
+            {
+                UserId = leaveBalance.UserId,
+                PaidLeave = leaveBalance.PaidLeave,
+                FreeLeave = leaveBalance.FreeLeave,
+                ShortLeave = leaveBalance.ShortLeave
+            };
+
+            return Ok(leaveBalanceDto);
+        }
+
 
 
         [HttpPost("getLeaveUserList")]
         public async Task<IActionResult> LeaveUserList(LeaveReqGridParams? gridParams = null)
         {
             gridParams ??= new LeaveReqGridParams();
-            
+
             List<VW_LeaveReqGrid> model = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveReqGrid @DateFrom={0},@DateTo={1},@LeaveTypeid={2},@UserCode={3},@processId = {4}", gridParams.DateFrom, gridParams.DateTo, gridParams.LeaveTypeid, gridParams.UserCode, gridParams.ProcessID).ToListAsync();
             return Ok(model);
         }
