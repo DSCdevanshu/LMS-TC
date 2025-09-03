@@ -23,21 +23,21 @@ namespace TCBackend.Controllers.Home
         [HttpGet("mydetails")]
         public async Task<IActionResult> GetMyDetails()
         {
-            // Get the logged-in user's ID from the JWT token
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(userIdString, out var userId))
             {
                 return Unauthorized();
             }
 
-            var userDetails = await _context.vw_EmpList.Where(u => u.UserId == userId).FirstOrDefaultAsync();
+            var myDetails = await _context.EmployeeDetails
+                .FirstOrDefaultAsync(emp => emp.UserId == userId);
 
-            if (userDetails == null)
+            if (myDetails == null)
             {
-                return NotFound("Employee details not found.");
+                return NotFound("Your employee details could not be found.");
             }
 
-            return Ok(userDetails);
+            return Ok(myDetails);
         }
     }
 }

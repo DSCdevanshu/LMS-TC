@@ -1,5 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using TCBackend.Dtos.Home;
 using TCBackend.Dtos.LeaveSystem;
+using TCBackend.Dtos.Management;
 using TCBackend.Model.Employee;
 using TCBackend.Model.LoginSecurity;
 
@@ -16,6 +18,8 @@ namespace TCBackend.Data
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<MenuItem> MenuItems { get; set; }
+        public DbSet<EmployeeDetailView> EmployeeDetails { get; set; }
+        public DbSet<Designation> DesignationMaster { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -47,6 +51,12 @@ namespace TCBackend.Data
                 .HasOne(rp => rp.Permission)
                 .WithMany(p => p.RolePermissions)
                 .HasForeignKey(rp => rp.PermissionId);
+
+            modelBuilder.Entity<EmployeeDetailView>(eb =>
+            {
+                eb.HasNoKey();
+                eb.ToView("vw_EmployeeDetails");
+            });
         }
 
 

@@ -8,6 +8,7 @@ using System.Security.Claims;
 using TCBackend.Authorization;
 using TCBackend.Data;
 using TCBackend.Dtos;
+using TCBackend.Dtos.Home;
 using TCBackend.Model.Employee;
 using TCBackend.Model.LoginSecurity;
 
@@ -194,6 +195,83 @@ namespace TCBackend.Controllers.Employee
 
             return Ok(accessibleMenu);
         }
+        [HttpGet("GetEmployeeDetails")]
+        [HasPermission("employees.read.all")]
+        public async Task<IActionResult> GetEmployeeDetails()
+        {
+            var employees = await _context.EmployeeDetails.ToListAsync();
+            return Ok(employees);
+        }
+
+        [HttpPost("CreateEmployee")]
+        [HasPermission("employees.create")]
+        public async Task<IActionResult> CreateEmployee([FromBody] CreateEmployeeDto dto)
+        {
+            try
+            {
+                var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+
+                var parameters = new[]
+                {
+                        new SqlParameter("@Username", dto.Username),
+                        new SqlParameter("@Password", passwordHash),
+                        new SqlParameter("@EmpCode", dto.EmpCode),
+                        new SqlParameter("@FirstName", dto.FirstName),
+                        new SqlParameter("@LastName", dto.LastName),
+                        new SqlParameter("@Email", dto.Email),
+                        new SqlParameter("@HireDate", dto.HireDate),
+                        new SqlParameter("@DepartmentId", dto.DepartmentId),
+                        new SqlParameter("@DesignationId", dto.DesignationId)
+                    };
+
+                await _context.Database
+                    .ExecuteSqlRawAsync("EXEC sp_CreateNewEmployee @Username, @Password, @EmpCode, @FirstName, @LastName, @Email, @HireDate, @DepartmentId, @DesignationId", parameters);
+
+                return Ok(new { Message = "Employee created successfully." });
+            }
+            catch (SqlException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, "An internal server error occurred.");
+            }
+        }
+
+
+        [HttpPut("updateEmployee{employeeId}")]
+        [HasPermission("employees.update.all")]
+        public async Task<IActionResult> UpdateEmployee(int employeeId, [FromBody] UpdateEmployeeDto dto)
+        {
+            try
+            {
+                var parameters = new[]
+                {
+                    new SqlParameter("@UserId", employeeId),
+                    new SqlParameter("@FirstName", dto.FirstName),
+                    new SqlParameter("@LastName", dto.LastName),
+                    new SqlParameter("@Email", dto.Email),
+                    new SqlParameter("@Mobile", (object)dto.Mobile ?? DBNull.Value),
+                    new SqlParameter("@DepartmentId", dto.DepartmentId),
+                    new SqlParameter("@DesignationId", dto.DesignationId)
+                };
+
+                await _context.Database
+                    .ExecuteSqlRawAsync("EXEC sp_UpdateEmployeeDetails @EmployeeId, @FirstName, @LastName, @Email, @Mobile, @DepartmentId, @DesignationId", parameters);
+
+                return Ok(new { Message = "Employee details updated successfully." });
+            }
+            catch (SqlException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, "An internal server error occurred.");
+            }
+        }
+
 
     }
 }
