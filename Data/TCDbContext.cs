@@ -57,12 +57,13 @@ namespace TCBackend.Data
                 eb.HasNoKey();
                 eb.ToView("vw_EmployeeDetails");
             });
+            modelBuilder.Entity<GenericDropdownDto>().HasNoKey();
         }
 
 
 
 
-
+        public DbSet<GenericDropdownDto> GenericDropdowns { get; set; }
         public DbSet<LoginToken> sp_CheckCredentials { get; set; }
         public DbSet<LeaveRequestMaster> LeaveRequestMaster { get; set; }
         public DbSet<LeaveProcessItem> LeaveProcessItem { get; set; }

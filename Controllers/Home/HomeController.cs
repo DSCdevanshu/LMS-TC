@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using TCBackend.Data;
+using TCBackend.Dtos.Home;
 
 namespace TCBackend.Controllers.Home
 {
@@ -38,6 +40,26 @@ namespace TCBackend.Controllers.Home
             }
 
             return Ok(myDetails);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetDropdownData([FromQuery] string flag)
+        {
+            if (string.IsNullOrEmpty(flag))
+            {
+                return BadRequest("A 'flag' parameter is required.");
+            }
+
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+            var flagParam = new SqlParameter("@Flag", flag);
+            var userIdParam = new SqlParameter("@LoginUserId", userId);
+
+            var results = await _context.Set<GenericDropdownDto>()
+                .FromSqlRaw("EXEC sp_GetDropdownData @Flag, @LoginUserId", flagParam, userIdParam)
+                .ToListAsync();
+
+            return Ok(results);
         }
     }
 }

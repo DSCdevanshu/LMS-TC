@@ -16,13 +16,6 @@ namespace TCBackend.Controllers.Employee
         private readonly TCDbContext _context;
         public DepartmentsController(TCDbContext context) { _context = context; }
 
-        [HttpGet]
-        [HasPermission("departments.read")]
-        public async Task<IActionResult> Get()
-        {
-            var departments = await _context.DepartmentMaster.FromSqlRaw("EXEC sp_GetDepartments").ToListAsync();
-            return Ok(departments);
-        }
 
         [HttpPost]
         [HasPermission("departments.create")]
