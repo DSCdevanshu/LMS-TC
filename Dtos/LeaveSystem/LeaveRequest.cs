@@ -159,5 +159,11 @@ namespace TCBackend.Dtos.LeaveSystem
         public int LeaveTypeId { get; set; }
         public string? LeaveType { get; set; }
     }
-
+    public class UserCalendarDataDto
+    {
+        public DateTime? Date { get; set; }
+        public string? Title { get; set; }
+        public string? Type { get; set; }
+        public string? Status { get; set; }
+    }
 }

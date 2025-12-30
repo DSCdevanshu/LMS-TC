@@ -14,7 +14,7 @@ namespace TCBackend.Controllers.LeaveSystem
 {
     [Route("api/[controller]")]
     [ApiController]
-    //[Authorize]
+    [Authorize]
     public class LeaveRequestController : Controller
     {
         private TCDbContext _dbContext;
@@ -227,14 +227,14 @@ namespace TCBackend.Controllers.LeaveSystem
             
             var parameters = new[]
             {
-            new SqlParameter("@empCode", empCode),
-            new SqlParameter("@UserId", requestDto.UserId),
-            new SqlParameter("@leaveType", requestDto.LeaveTypeId),
-            new SqlParameter("@startDate", requestDto.StartDate),
-            new SqlParameter("@endDate", requestDto.EndDate),
-            new SqlParameter("@loginUsr", loginUsr),
-            new SqlParameter("@empRemarks", requestDto.EmpRemarks ?? (object)DBNull.Value)
-        };
+                new SqlParameter("@empCode", empCode),
+                new SqlParameter("@UserId", requestDto.UserId),
+                new SqlParameter("@leaveType", requestDto.LeaveTypeId),
+                new SqlParameter("@startDate", requestDto.StartDate),
+                new SqlParameter("@endDate", requestDto.EndDate),
+                new SqlParameter("@loginUsr", loginUsr),
+                new SqlParameter("@empRemarks", requestDto.EmpRemarks ?? (object)DBNull.Value)
+            };
 
             try
             {
@@ -375,7 +375,18 @@ namespace TCBackend.Controllers.LeaveSystem
             return Ok(result);
         }
 
+        [HttpGet("getUserCalendarData")]
+        public async Task<IActionResult> CalendarData(int month,int year)
+        {
 
+            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdString, out var userId))
+            {
+                return Unauthorized("User ID not found in token.");
+            }
+            var model = await _dbContext.sp_GetUserCalendarData.FromSqlRaw("sp_GetUserCalendarData @userid={0},@month={1},@year={2}", userId, month, year).ToListAsync();
+            return Ok(model);
+        }
 
 
 
