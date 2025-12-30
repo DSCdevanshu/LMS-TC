@@ -372,6 +372,7 @@ namespace TCBackend.Controllers.LeaveSystem
         }
 
         [HttpGet("getUserCalendarData")]
+        [ProducesResponseType(typeof(List<UserCalendarDataDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> CalendarData(int month,int year)
         {
 
