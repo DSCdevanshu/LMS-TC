@@ -224,11 +224,12 @@ namespace TCBackend.Controllers.LeaveSystem
         {
             var loginUsr = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             var empCode = _dbContext.vw_EmpList.Where(id => id.UserId == requestDto.UserId).FirstOrDefaultAsync();
+            var userIdString = (requestDto.UserId==null || requestDto.UserId == 0)? User.FindFirstValue(ClaimTypes.NameIdentifier):Convert.ToString(requestDto.UserId);
             
             var parameters = new[]
             {
                 new SqlParameter("@empCode", empCode),
-                new SqlParameter("@UserId", requestDto.UserId),
+                new SqlParameter("@UserId", userIdString),
                 new SqlParameter("@leaveType", requestDto.LeaveTypeId),
                 new SqlParameter("@startDate", requestDto.StartDate),
                 new SqlParameter("@endDate", requestDto.EndDate),
