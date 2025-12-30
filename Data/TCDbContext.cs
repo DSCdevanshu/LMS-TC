@@ -58,7 +58,8 @@ namespace TCBackend.Data
                 eb.ToView("vw_EmployeeDetails");
             });
             modelBuilder.Entity<GenericDropdownDto>().HasNoKey();
-            modelBuilder.Entity<UserCalendarData>().HasNoKey();
+            modelBuilder.Entity<UserCalendarDataDto>().HasNoKey();
+            modelBuilder.Entity<SpLeaveRequestResult>().HasNoKey();
         }
 
 
@@ -76,7 +77,7 @@ namespace TCBackend.Data
         public DbSet<LeaveTypeMaster> LeaveTypeMaster { get; set; }
         public DbSet<LeaveBalanceDto> LeaveBalance { get; set; }
         public DbSet<PageMaster> PageMaster { get; set; }
-
-        public DbSet<UserCalendarData> sp_GetUserCalendarData { get; set; }
+        public DbSet<SpLeaveRequestResult> SpLeaveRequestResult { get; set; }
+        public DbSet<UserCalendarDataDto> sp_GetUserCalendarData { get; set; }
     }
 }

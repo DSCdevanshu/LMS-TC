@@ -223,8 +223,8 @@ namespace TCBackend.Controllers.LeaveSystem
         public async Task<IActionResult> SubmitLeaveRequest([FromBody] CreateLeaveRequestDto requestDto)
         {
             var loginUsr = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var empCode = _dbContext.vw_EmpList.Where(id => id.UserId == requestDto.UserId).FirstOrDefaultAsync();
             var userIdString = (requestDto.UserId==null || requestDto.UserId == 0)? User.FindFirstValue(ClaimTypes.NameIdentifier):Convert.ToString(requestDto.UserId);
+            var empCode =(await _dbContext.vw_EmpList.Where(id => id.UserId == Convert.ToInt64(userIdString)).FirstOrDefaultAsync())?.EmpCode;
             
             var parameters = new[]
             {
@@ -239,7 +239,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
             try
             {
-                var results = await _dbContext.Set<SpLeaveRequestResult>()
+                var results = await _dbContext.SpLeaveRequestResult
                     .FromSqlRaw("EXEC sp_LeaveReqEntry @empcode,@userId, @leaveType, @startDate, @endDate, @loginUsr, @empRemarks", parameters)
                     .ToListAsync();
 
@@ -248,11 +248,6 @@ namespace TCBackend.Controllers.LeaveSystem
                 if (result == null)
                 {
                     return StatusCode(500, "An unexpected error occurred.");
-                }
-
-                if (result.Message == "Error")
-                {
-                    return BadRequest(new { message = result.ErrorMessage });
                 }
 
                 return Ok(new { message = result.Message, leaveRequestId = result.LeaveRequestID });
