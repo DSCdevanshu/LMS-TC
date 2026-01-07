@@ -10,19 +10,24 @@ using System.Diagnostics;
 using TCBackend.Dtos.LeaveSystem;
 using System.Security.Claims;
 using TCBackend.Authorization;
+using Dapper;
+using TCBackend.Dtos.Wrappers;
+using TCBackend.Services.IServices;
 namespace TCBackend.Controllers.LeaveSystem
 {
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class LeaveRequestController : Controller
+    public class LeaveRequestController : ControllerBase
     {
         private TCDbContext _dbContext;
         private readonly EmailService _emailService;
-        public LeaveRequestController(TCDbContext context, EmailService emailService)
+        private readonly IPermissionService _permissionService;
+        public LeaveRequestController(TCDbContext context, EmailService emailService, IPermissionService permissionService)
         {
             _dbContext = context;
             _emailService = emailService;
+            _permissionService = permissionService;
         }
         [HttpGet("test")]
         public async Task<IActionResult> test()
@@ -57,64 +62,64 @@ namespace TCBackend.Controllers.LeaveSystem
             return Ok("Success");
         }
 
-        /*[HttpPost("postLeaveProcessHistory")]
-        public async Task<IActionResult> LeaveProcessHistory(int LeaveReqID)
-        {
-            var history = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveProcessHistory @LeaveReqID={0}", LeaveReqID).ToListAsync();
-            return Ok(history);
-        }*/
-        [HttpPost("postLeaveProcessHistory")]
-        public async Task<IActionResult> LeaveProcessHistory(int LeaveReqID)
+        
+
+        [HttpGet("getLeaveHistory/{leaveReqId}")]
+        [HasPermission("leaves.view")]
+        [ProducesResponseType(typeof(List<LeaveProcessHistory>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetLeaveHistory(int leaveReqId)
         {
             try
             {
-                // Input validation
-                if (LeaveReqID <= 0)
-                {
-                    return BadRequest(new
-                    {
-                        Status = "Error",
-                        Message = "LeaveReqID must be a positive integer.",
-                        Data = (object)null
-                    });
-                }
-
-                // Call the stored procedure
-                var history = await _dbContext.sp_LeaveReqGrid
-                    .FromSqlRaw("sp_LeaveProcessHistory @LeaveReqID={0}", LeaveReqID)
+                var result = await _dbContext.SpLeaveProcessHistoryResults
+                    .FromSqlRaw("EXEC sp_GetLeaveProcessHistory @LeaveReqID={0}", leaveReqId)
                     .ToListAsync();
 
-                // Check if history is empty or contains a message
-                if (history == null || !history.Any())
+                if (result == null || !result.Any())
                 {
-                    return NotFound(new
-                    {
-                        Status = "Error",
-                        Message = $"No process history found for LeaveReqID: {LeaveReqID}",
-                        Data = (object)null
-                    });
+                    return Ok(new List<LeaveProcessHistory>());
                 }
 
-                // Return success response
-                return Ok(new
-                {
-                    Status = "Success",
-                    Message = "Process history retrieved successfully.",
-                    Data = history
-                });
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                // Return a generic error response
-                return StatusCode(500, new
-                {
-                    Status = "Error",
-                    Message = "An unexpected error occurred while retrieving the process history. Please try again later.",
-                    Data = (object)null
-                });
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
+        [HttpGet("getLeaveRequestDetails/{leaveReqId}")]
+        [HasPermission("leaves.view")]
+        [ProducesResponseType(typeof(LeaveDetailsResponseDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetLeaveRequestDetails(int leaveReqId)
+        {
+            var response = new LeaveDetailsResponseDto();
+            var connection = _dbContext.Database.GetDbConnection();
 
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("@LeaveReqID", leaveReqId);
+
+                using (var multi = await connection.QueryMultipleAsync("sp_GetLeaveRequestDetails", parameters, commandType: CommandType.StoredProcedure))
+                {
+                    response.Header = await multi.ReadFirstOrDefaultAsync<LeaveRequestHeaderDto>();
+
+                    if (response.Header == null)
+                    {
+                        return NotFound("Leave Request not found.");
+                    }
+
+                    var days = await multi.ReadAsync<LeaveRequestDayDto>();
+                    response.Days = days.ToList();
+                }
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
+        }
 
         [HttpPost("postLeaveReqSend")]
         public async Task<IActionResult> LeaveReqSend(int LeaveReqId)
@@ -250,11 +255,62 @@ namespace TCBackend.Controllers.LeaveSystem
                     return StatusCode(500, "An unexpected error occurred.");
                 }
 
-                return Ok(new { message = result.Message, leaveRequestId = result.LeaveRequestID });
+                return Ok(new { status = result.ErrorNumber, message = result.ErrorMessage, leaveRequestId = result.LeaveRequestID });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"An internal server error occurred: {ex.Message}");
+            }
+        }
+
+        [HttpPost("postLeaveReqEntryV2")]
+        [HasPermission("leaves.create")]
+        public async Task<ActionResult<ApiResponse<int>>> SubmitLeaveRequestV2([FromBody] CreateLeaveRequestDtoV2 requestDto)
+        {
+            try
+            {
+                var loginUsrId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+                var targetUserId = (requestDto.UserId == 0 || requestDto.UserId==null) ? loginUsrId : requestDto.UserId;
+
+                var empData = await _dbContext.vw_EmpList
+                    .Where(x => x.UserId == targetUserId)
+                    .FirstOrDefaultAsync();
+
+                if (empData == null)
+                    return BadRequest(new ApiResponse<int>(0, "Employee not found.", 0));
+
+                int reqIdToPass = requestDto.LeaveRequestId ?? 0;
+                var parameters = new[]
+                {
+                    new SqlParameter("@leavereqId", reqIdToPass),
+                    new SqlParameter("@empCode", empData.EmpCode),
+                    new SqlParameter("@UserId", targetUserId),
+                    new SqlParameter("@leaveType", requestDto.LeaveTypeId),
+                    new SqlParameter("@startDate", requestDto.StartDate),
+                    new SqlParameter("@endDate", requestDto.EndDate),
+                    new SqlParameter("@loginUsr", loginUsrId.ToString()),
+                    new SqlParameter("@empRemarks", (object)requestDto.EmpRemarks ?? DBNull.Value)
+                };
+
+                var results = await _dbContext.SpLeaveRequestResultsV2
+                    .FromSqlRaw("EXEC sp_LeaveReqEntry_V2 @leavereqId, @empcode, @userId, @leaveType, @startDate, @endDate, @loginUsr, @empRemarks", parameters)
+                    .ToListAsync();
+
+                var result = results.FirstOrDefault();
+
+                if (result == null)
+                    return StatusCode(500, new ApiResponse<int>(0, "No response from database.", 0));
+
+                if (result.Status == 0)
+                {
+                    return Ok(new ApiResponse<int>(0, result.Message, 0));
+                }
+
+                return Ok(new ApiResponse<int>(1, result.Message, result.LeaveReqID??0));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<int>(0, $"Internal server error: {ex.Message}", 0));
             }
         }
 
@@ -309,6 +365,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
         [HttpGet("my-balance")]
+        [ProducesResponseType(typeof(LeaveBalanceDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyLeaveBalance()
         {
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -337,31 +394,59 @@ namespace TCBackend.Controllers.LeaveSystem
         }
 
 
-
         [HttpPost("getLeaveUserList")]
-        public async Task<IActionResult> LeaveUserList(LeaveReqGridParams? gridParams = null)
+        [HasPermission("leaves.view")]
+        [ProducesResponseType(typeof(List<VW_LeaveReqGrid>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> LeaveUserList([FromBody] LeaveReqGridParams? gridParams)
         {
             gridParams ??= new LeaveReqGridParams();
 
-            List<VW_LeaveReqGrid> model = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveReqGrid @DateFrom={0},@DateTo={1},@LeaveTypeid={2},@UserCode={3},@processId = {4}", gridParams.DateFrom, gridParams.DateTo, gridParams.LeaveTypeid, gridParams.UserCode, gridParams.ProcessID).ToListAsync();
-            return Ok(model);
-        }
-        [HttpPost("getLeaveRmList")]
-        public async Task<IActionResult> LeaveRmList(LeaveReqGridParams? gridParams = null)
-        {
-            gridParams ??= new LeaveReqGridParams();
+            try
+            {
+                var loginUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+                bool hasViewAllPermission = await _permissionService.HasPermissionAsync(loginUserId, "leaves.view_all");
 
-            List<VW_LeaveReqGrid> model = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveReqGrid @DateFrom={0},@DateTo={1},@LeaveTypeid={2},@UserCode={3},@processId = {4}", gridParams.DateFrom, gridParams.DateTo, gridParams.LeaveTypeid, gridParams.UserCode, gridParams.ProcessID).ToListAsync();
-            return Ok(model);
-        }
-        [HttpPost("getLeaveHrList")]
-        public async Task<IActionResult> LeaveHrList(LeaveReqGridParams? gridParams = null)
-        {
-            gridParams ??= new LeaveReqGridParams();
+                var parameters = new[]
+                {
+                    new SqlParameter("@DateFrom", (object?)gridParams.DateFrom ?? DBNull.Value),
+                    new SqlParameter("@DateTo",   (object?)gridParams.DateTo   ?? DBNull.Value),
+                    new SqlParameter("@LeaveTypeid", gridParams.LeaveTypeid ?? 0),
+                    new SqlParameter("@LeaveUserId", gridParams.LeaveUserId ?? 0),
+                    new SqlParameter("@depId",       gridParams.DepId ?? 0),
+                    new SqlParameter("@ProcessID",   gridParams.ProcessID ?? 0),
+                    new SqlParameter("@LoginUserId", loginUserId),
+                    new SqlParameter("@ViewAll", hasViewAllPermission ? 1 : 0)
+                };
 
-            List<VW_LeaveReqGrid> model = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveReqGrid @DateFrom={0},@DateTo={1},@LeaveTypeid={2},@UserCode={3},@processId = {4}", gridParams.DateFrom, gridParams.DateTo, gridParams.LeaveTypeid, gridParams.UserCode, gridParams.ProcessID).ToListAsync();
-            return Ok(model);
+                var model = await _dbContext.sp_LeaveReqGrid
+                    .FromSqlRaw("EXEC sp_LeaveReqGrid @DateFrom, @DateTo, @LeaveTypeid, @LeaveUserId, @depId, @ProcessID, @LoginUserId, @ViewAll", parameters)
+                    .ToListAsync();
+
+                return Ok(model);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
         }
+
+
+        //[HttpPost("getLeaveRmList")]
+        //public async Task<IActionResult> LeaveRmList(LeaveReqGridParams? gridParams = null)
+        //{
+        //    gridParams ??= new LeaveReqGridParams();
+
+        //    List<VW_LeaveReqGrid> model = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveReqGrid @DateFrom={0},@DateTo={1},@LeaveTypeid={2},@UserCode={3},@processId = {4}", gridParams.DateFrom, gridParams.DateTo, gridParams.LeaveTypeid, gridParams.UserCode, gridParams.ProcessID).ToListAsync();
+        //    return Ok(model);
+        //}
+        //[HttpPost("getLeaveHrList")]
+        //public async Task<IActionResult> LeaveHrList(LeaveReqGridParams? gridParams = null)
+        //{
+        //    gridParams ??= new LeaveReqGridParams();
+
+        //    List<VW_LeaveReqGrid> model = await _dbContext.sp_LeaveReqGrid.FromSqlRaw("sp_LeaveReqGrid @DateFrom={0},@DateTo={1},@LeaveTypeid={2},@UserCode={3},@processId = {4}", gridParams.DateFrom, gridParams.DateTo, gridParams.LeaveTypeid, gridParams.UserCode, gridParams.ProcessID).ToListAsync();
+        //    return Ok(model);
+        //}
 
 
         [HttpGet("getLeaveType")]

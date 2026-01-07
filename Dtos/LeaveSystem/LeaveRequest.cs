@@ -11,6 +11,12 @@ namespace TCBackend.Dtos.LeaveSystem
         public int? ErrorLine { get; set; }
         public int? ErrorNumber { get; set; }
     }
+    public class SpLeaveRequestResultV2
+    {
+        public int Status { get; set; }
+        public string? Message { get; set; }
+        public int? LeaveReqID { get; set; }
+    }
 
     public class LeaveRequestMaster
     {
@@ -96,61 +102,47 @@ namespace TCBackend.Dtos.LeaveSystem
     {
         [Key]
         public int LeaveReqID { get; set; }
-        public string? LeaveReqCD { get; set; }
-        public string? empname { get; set; }
-        public DateTime? StartDate { get; set; }
-        public DateTime? EndDate { get; set; }
-        public string? EmpCode { get; set; }
-        public int? DepId { get; set; }
-        public string? DepCode { get; set; }
+        public string EmpCode { get; set; }
+        public int UserId { get; set; }
+        public string EmployeeName { get; set; }
+        public int? DepID { get; set; }
         public string? DepartmentName { get; set; }
-        public DateTime? RequestDate { get; set; }
+        public int? DesignationId { get; set; }
+        public string? DesignationName { get; set; }
+        public int LeaveTypeid { get; set; }
+        public string LeaveTypeName { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public int TotalDays { get; set; }
+        public DateTime RequestDate { get; set; }
         public string? EmpRemarks { get; set; }
-        public string? RequestedBy { get; set; }
-        public int? ndays { get; set; }
-        public int? ReasonID { get; set; }
-        public string? ReasonRemarks { get; set; }
-        public DateTime? ProcessDate { get; set; }
-        public string? ProcessBy { get; set; }
-        public string? ProcessName { get; set; }
-        public int? processId { get; set; }
-        public int? LeaveTypeId { get; set; }
-        public string? LeaveType { get; set; }
-
+        public string? RequestBy { get; set; }
+        public string RecordStatus { get; set; }
+        public int ProcessId { get; set; }
+        public string CurrentStatusName { get; set; }
+        public string? RM_HOD_ApprovedBy { get; set; }
+        public DateTime? RM_HOD_ApprovalDate { get; set; }
+        public string? HR_ApprovedBy { get; set; }
+        public DateTime? HR_ApprovalDate { get; set; }
     }
-    [Keyless]
     public class LeaveReqGridParams
     {
-        public DateTime DateFrom { get; set; }
-        public DateTime DateTo { get; set; }
-        public int LeaveTypeid { get; set; }
-        public int depId { get; set; }
-        public int ProcessID { get; set; }
-        public string? UserCode { get; set; }
-
-        public LeaveReqGridParams()
-        {
-            DateFrom = new DateTime(2025, 1, 1);
-            DateTo = new DateTime(2025, 12, 31);
-            LeaveTypeid = 0;
-            UserCode = "0";
-            depId = 0;
-            ProcessID = 0;
-        }
+        public DateTime? DateFrom { get; set; }
+        public DateTime? DateTo { get; set; }
+        public int? LeaveTypeid { get; set; }
+        public int? LeaveUserId { get; set; }
+        public int? DepId { get; set; }
+        public int? ProcessID { get; set; }
     }
-    [Keyless]
-    public class spLeaveProcessHistory
+
+    public class LeaveProcessHistory
     {
-        public int ProcessStatusItemID { get; set; }
-        public int LeaveReqID { get; set; }
-        public string? LeaveReqCD { get; set; }
-        public string? ProcessName { get; set; }
+        public DateTime? ProcessDate { get; set; }
         public string? Status { get; set; }
-        public DateTime ProcessDate { get; set; }
-        public string? ProcessBy { get; set; }
+        public string? Remarks { get; set; }
+        public int? ProcessByUserId { get; set; }
+        public string? ProcessByCode { get; set; }
         public string? ProcessByName { get; set; }
-        public int ReasonID { get; set; }
-        public string? ReasonRemarks { get; set; }
     }
 
     public class LeaveTypeMaster
@@ -165,5 +157,30 @@ namespace TCBackend.Dtos.LeaveSystem
         public string? Title { get; set; }
         public string? Type { get; set; }
         public string? Status { get; set; }
+    }
+    public class LeaveDetailsResponseDto
+    {
+        public LeaveRequestHeaderDto? Header { get; set; }
+        public List<LeaveRequestDayDto> Days { get; set; } = new List<LeaveRequestDayDto>();
+    }
+
+    public class LeaveRequestHeaderDto
+    {
+        public int LeaveReqID { get; set; }
+        public string? EmpCode { get; set; }
+        public string? EmployeeName { get; set; }
+        public string? LeaveType { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public string? CurrentStatus { get; set; }
+        public string? EmpRemarks { get; set; }
+        public DateTime RequestDate { get; set; }
+    }
+
+    public class LeaveRequestDayDto
+    {
+        public DateTime LeaveDate { get; set; }
+        public string? DayName { get; set; }
+        public string? DayLeaveType { get; set; }
     }
 }

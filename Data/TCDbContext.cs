@@ -2,6 +2,7 @@
 using TCBackend.Dtos.Home;
 using TCBackend.Dtos.LeaveSystem;
 using TCBackend.Dtos.Management;
+using TCBackend.Dtos.Wrappers;
 using TCBackend.Model.Employee;
 using TCBackend.Model.LoginSecurity;
 
@@ -60,6 +61,8 @@ namespace TCBackend.Data
             modelBuilder.Entity<GenericDropdownDto>().HasNoKey();
             modelBuilder.Entity<UserCalendarDataDto>().HasNoKey();
             modelBuilder.Entity<SpLeaveRequestResult>().HasNoKey();
+            modelBuilder.Entity<LeaveProcessHistory>().HasNoKey();
+            modelBuilder.Entity<SpLeaveRequestResultV2>().HasNoKey();
         }
 
 
@@ -73,11 +76,13 @@ namespace TCBackend.Data
         public DbSet<Department> DepartmentMaster { get; set; }
         public DbSet<vwEmpList> vw_EmpList { get; set; }
         public DbSet<VW_LeaveReqGrid> sp_LeaveReqGrid { get; set; }
-        public DbSet<spLeaveProcessHistory> sp_LeaveProcessHistory { get; set; }
+        public DbSet<LeaveProcessHistory> SpLeaveProcessHistoryResults { get; set; }
         public DbSet<LeaveTypeMaster> LeaveTypeMaster { get; set; }
         public DbSet<LeaveBalanceDto> LeaveBalance { get; set; }
         public DbSet<PageMaster> PageMaster { get; set; }
         public DbSet<SpLeaveRequestResult> SpLeaveRequestResult { get; set; }
+        public DbSet<SpLeaveRequestResultV2> SpLeaveRequestResultsV2 { get; set; }
+        
         public DbSet<UserCalendarDataDto> sp_GetUserCalendarData { get; set; }
     }
 }
