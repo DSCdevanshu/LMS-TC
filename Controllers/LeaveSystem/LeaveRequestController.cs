@@ -35,31 +35,41 @@ namespace TCBackend.Controllers.LeaveSystem
             return Ok("Test is working");
         }
 
-        private async Task<IActionResult> changeProcess(int LeaveReqId, int processId)
+        private async Task<IActionResult> changeProcess(int LeaveReqId, int processId,string? remarks="")
         {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-            if (leave == null)
+            try
             {
-                return NotFound("Leave request not found.");
+                var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+                var loginUsr = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+                if (leave == null)
+                {
+                    return NotFound("Leave request not found.");
+                }
+                var record = new LeaveProcessItem
+                {
+                    TableID = 3,
+                    ItemID = LeaveReqId,
+                    ProcessID = processId,
+                    ProcessBy = loginUsr,
+                    ProcessDate = DateTime.Now,
+                    Status = "A",
+                    CreatedBy = loginUsr,
+                    CreatedOn = DateTime.Now,
+                    ReasonRemarks = remarks
+
+                };
+                await _dbContext.LeaveProcessItem.AddAsync(record);
+                leave.ProcessId = processId;
+                _dbContext.LeaveRequestMaster.Update(leave);
+                await _dbContext.SaveChangesAsync();
+
+                return Ok(new ApiResponse<int>(1, "Success", LeaveReqId));
             }
-            var record = new LeaveProcessItem
+            catch (Exception ex)
             {
-                ItemID = LeaveReqId,
-                ProcessID = processId,
-                ProcessBy = User.FindFirst("EmployeeCode")?.Value,
-                ProcessDate = DateTime.Now,
-                Status = "A",
-                CreatedBy = User.FindFirst("EmployeeCode")?.Value,
-                CreatedOn = DateTime.Now,
-
-            };
-            await _dbContext.LeaveProcessItem.AddAsync(record);
-            leave.ProcessId = processId;
-            _dbContext.LeaveRequestMaster.Update(leave);
-            await _dbContext.SaveChangesAsync();
-
-            return Ok("Success");
+                return StatusCode(500, new ApiResponse<int>(0, $"Internal Error: {ex.Message}", 0));
+            }
         }
 
         
@@ -134,90 +144,120 @@ namespace TCBackend.Controllers.LeaveSystem
             // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
         }
 
-        [HttpPost("postLeaveApprovedByRM")]
-        public async Task<IActionResult> LeaveApprovedByRM(int LeaveReqId)
+        [HttpPost("updateLeaveStatus")]
+        [HasPermission("leaves.approve")]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateLeaveStatus([FromBody] ChangeLeaveProcessDto request)
         {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-            if (leave == null)
+            // 1. Basic Validation
+            if (request.LeaveReqId <= 0 || request.ProcessId <= 0)
             {
-                return NotFound("Leave request not found.");
+                return BadRequest(new ApiResponse<int>(0, "Invalid Data.", 0));
             }
-            return await changeProcess(LeaveReqId, 3);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        }
 
+            // 2. (Optional) Role Validation Logic
+            // This ensures a Manager cannot perform an "HR Approval" action.
+            // RM Actions: 3 (Approve), 4 (Reject), 5 (Hold)
+            // HR Actions: 6 (Approve), 7 (Reject), 8 (Hold)
 
-        [HttpPost("postLeaveRejectedByRM")]
-        public async Task<IActionResult> LeaveRejectedByRM(int LeaveReqId)
-        {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-            if (leave == null)
+            /* Uncomment this block if you want strict security
+            bool isHR = User.IsInRole("HR");
+            if ((request.ProcessId >= 6 && request.ProcessId <= 8) && !isHR)
             {
-                return NotFound("Leave request not found.");
+                return StatusCode(403, new ApiResponse<int>(0, "Only HR can perform this action.", 0));
             }
-            return await changeProcess(LeaveReqId, 4);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        }
-
-
-        [HttpPost("postLeaveHoldByRM")]
-        public async Task<IActionResult> LeaveHoldByRM(int LeaveReqId)
-        {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-            if (leave == null)
-            {
-                return NotFound("Leave request not found.");
-            }
-            return await changeProcess(LeaveReqId, 5);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        }
-
-
-        [HttpPost("postLeaveApprovedByHR")]
-        public async Task<IActionResult> LeaveApprovedByHR(int LeaveReqId)
-        {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-            if (leave == null)
-            {
-                return NotFound("Leave request not found.");
-            }
-            return await changeProcess(LeaveReqId, 6);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+            */
+            return await changeProcess(request.LeaveReqId, request.ProcessId, request.Remarks);
         }
 
 
 
-        [HttpPost("postLeaveRejectedByHR")]
-        public async Task<IActionResult> LeaveRejectedByHR(int LeaveReqId)
-        {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+        //[HttpPost("postLeaveApprovedByRM")]
+        //public async Task<IActionResult> LeaveApprovedByRM(int LeaveReqId)
+        //{
+        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
 
-            if (leave == null)
-            {
-                return NotFound("Leave request not found.");
-            }
-            return await changeProcess(LeaveReqId, 7);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        }
+        //    if (leave == null)
+        //    {
+        //        return NotFound("Leave request not found.");
+        //    }
+        //    return await changeProcess(LeaveReqId, 3);
+        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+        //}
+
+
+        //[HttpPost("postLeaveRejectedByRM")]
+        //public async Task<IActionResult> LeaveRejectedByRM(int LeaveReqId)
+        //{
+        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+
+        //    if (leave == null)
+        //    {
+        //        return NotFound("Leave request not found.");
+        //    }
+        //    return await changeProcess(LeaveReqId, 4);
+        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+        //}
+
+
+        //[HttpPost("postLeaveHoldByRM")]
+        //public async Task<IActionResult> LeaveHoldByRM(int LeaveReqId)
+        //{
+        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+
+        //    if (leave == null)
+        //    {
+        //        return NotFound("Leave request not found.");
+        //    }
+        //    return await changeProcess(LeaveReqId, 5);
+        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+        //}
+
+
+        //[HttpPost("postLeaveApprovedByHR")]
+        //public async Task<IActionResult> LeaveApprovedByHR(int LeaveReqId)
+        //{
+        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+
+        //    if (leave == null)
+        //    {
+        //        return NotFound("Leave request not found.");
+        //    }
+        //    return await changeProcess(LeaveReqId, 6);
+        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+        //}
 
 
 
-        [HttpPost("postLeaveHoldByHR")]
-        public async Task<IActionResult> LeaveHoldByHR(int LeaveReqId)
-        {
-            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+        //[HttpPost("postLeaveRejectedByHR")]
+        //public async Task<IActionResult> LeaveRejectedByHR(int LeaveReqId)
+        //{
+        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
 
-            if (leave == null)
-            {
-                return NotFound("Leave request not found.");
-            }
-            return await changeProcess(LeaveReqId, 8);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        }
+        //    if (leave == null)
+        //    {
+        //        return NotFound("Leave request not found.");
+        //    }
+        //    return await changeProcess(LeaveReqId, 7);
+        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+        //}
+
+
+
+        //[HttpPost("postLeaveHoldByHR")]
+        //public async Task<IActionResult> LeaveHoldByHR(int LeaveReqId)
+        //{
+        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
+
+        //    if (leave == null)
+        //    {
+        //        return NotFound("Leave request not found.");
+        //    }
+        //    return await changeProcess(LeaveReqId, 8);
+        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
+        //}
 
 
 
@@ -299,18 +339,13 @@ namespace TCBackend.Controllers.LeaveSystem
                 var result = results.FirstOrDefault();
 
                 if (result == null)
-                    return StatusCode(500, new ApiResponse<int>(0, "No response from database.", 0));
+                    return StatusCode(500, new ApiResponse<object>(0, "No response from database.", new { leaveReqId = 0 }));
 
-                if (result.Status == 0)
-                {
-                    return Ok(new ApiResponse<int>(0, result.Message, 0));
-                }
-
-                return Ok(new ApiResponse<int>(1, result.Message, result.LeaveReqID??0));
+                return Ok(new ApiResponse<object>(result.Status, result.Message, new { leaveReqId = result.LeaveReqID ?? 0 }));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<int>(0, $"Internal server error: {ex.Message}", 0));
+                return StatusCode(500, new ApiResponse<object>(0, $"Internal server error: {ex.Message}", new { leaveReqId = 0 }));
             }
         }
 

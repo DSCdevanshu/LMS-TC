@@ -1,5 +1,8 @@
-﻿namespace TCBackend.Dtos.Management
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace TCBackend.Dtos.Management
 {
+   
     public class DepartmentDto
     {
         public string? DepCode { get; set; }

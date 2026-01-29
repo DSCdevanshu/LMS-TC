@@ -63,12 +63,12 @@ namespace TCBackend.Dtos.LeaveSystem
         public int TableID { get; set; }
         public int ItemID { get; set; }
         public int ProcessID { get; set; }
-        public string? ProcessBy { get; set; }
+        public int? ProcessBy { get; set; }
         public DateTime ProcessDate { get; set; }
         public int? ReasonID { get; set; }
         public string? ReasonRemarks { get; set; }
         public string? Status { get; set; }
-        public string? CreatedBy { get; set; }
+        public int? CreatedBy { get; set; }
         public DateTime CreatedOn { get; set; }
     }
 
@@ -183,4 +183,12 @@ namespace TCBackend.Dtos.LeaveSystem
         public string? DayName { get; set; }
         public string? DayLeaveType { get; set; }
     }
+
+    public class ChangeLeaveProcessDto
+    {
+        public int LeaveReqId { get; set; }
+        public int ProcessId { get; set; }
+        public string? Remarks { get; set; }
+    }
+
 }

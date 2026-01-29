@@ -42,10 +42,12 @@ namespace TCBackend.Model.Employee
     {
         [Key]
         public int DepId { get; set; }
-        public string? DepCode { get; set; }
-        public string? DepartmentName { get; set; }
-        public string? Status { get; set; }
-        public string? HOD { get; set; }
+        public string DepCode { get; set; }
+        public string DepartmentName { get; set; }
+        public int? HOD { get; set; }
+        public string? Status { get; set; } = "A";
+        public DateTime? CreatedOn { get; set; }
+        public string? CreatedBy { get; set; }
     }
 
     public class PageMaster

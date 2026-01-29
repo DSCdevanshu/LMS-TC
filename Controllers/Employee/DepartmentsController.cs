@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using TCBackend.Authorization;
 using TCBackend.Data;
 using TCBackend.Dtos.Management;
+using TCBackend.Dtos.Wrappers;
+using TCBackend.Model.Employee;
 
 namespace TCBackend.Controllers.Employee
 {
@@ -17,28 +19,130 @@ namespace TCBackend.Controllers.Employee
         public DepartmentsController(TCDbContext context) { _context = context; }
 
 
-        [HttpPost]
-        [HasPermission("departments.create")]
-        public async Task<IActionResult> Create([FromBody] DepartmentDto dto)
+        //[HttpPost]
+        //[HasPermission("departments.create")]
+        //public async Task<IActionResult> Create([FromBody] DepartmentDto dto)
+        //{
+        //    await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_CreateDepartment {dto.DepCode}, {dto.DepartmentName}, {dto.HOD}");
+        //    return Ok(new { Message = "Department created." });
+        //}
+
+        //[HttpPut("{id}")]
+        //[HasPermission("departments.update")]
+        //public async Task<IActionResult> Update(int id, [FromBody] DepartmentDto dto)
+        //{
+        //    await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_UpdateDepartment {id}, {dto.DepCode}, {dto.DepartmentName}, {dto.HOD}");
+        //    return Ok(new { Message = "Department updated." });
+        //}
+
+        //[HttpDelete("{id}")]
+        //[HasPermission("departments.delete")]
+        //public async Task<IActionResult> Delete(int id)
+        //{
+        //    await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_DeleteDepartment {id}");
+        //    return Ok(new { Message = "Department deleted." });
+        //}
+
+
+
+
+        [HttpGet]
+        [HasPermission("departments.view")]
+        public async Task<ActionResult<ApiResponse<List<Department>>>> GetAll()
         {
-            await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_CreateDepartment {dto.DepCode}, {dto.DepartmentName}, {dto.HOD}");
-            return Ok(new { Message = "Department created." });
+            var list = await _context.DepartmentMaster.ToListAsync();
+            return Ok(new ApiResponse<List<Department>>(1, "Success", list));
         }
 
+        // CREATE
+        [HttpPost]
+        [HasPermission("departments.create")]
+        public async Task<ActionResult<ApiResponse<object>>> Create([FromBody] DepartmentDto dto)
+        {
+            try
+            {
+                // Optional: Check for duplicate Code
+                if (await _context.DepartmentMaster.AnyAsync(d => d.DepCode == dto.DepCode))
+                {
+                    return BadRequest(new ApiResponse<object>(0, $"Department Code '{dto.DepCode}' already exists.", null));
+                }
+
+                var department = new Department
+                {
+                    DepCode = dto.DepCode,
+                    DepartmentName = dto.DepartmentName,
+                    HOD = dto.HOD
+                };
+
+                _context.DepartmentMaster.Add(department);
+                await _context.SaveChangesAsync();
+
+                // Return the ID of the created item in Data, or null
+                return Ok(new ApiResponse<object>(1, "Department created successfully.", new { id = department.DepId }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
+        }
+
+        // UPDATE
         [HttpPut("{id}")]
         [HasPermission("departments.update")]
-        public async Task<IActionResult> Update(int id, [FromBody] DepartmentDto dto)
+        public async Task<ActionResult<ApiResponse<object>>> Update(int id, [FromBody] DepartmentDto dto)
         {
-            await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_UpdateDepartment {id}, {dto.DepCode}, {dto.DepartmentName}, {dto.HOD}");
-            return Ok(new { Message = "Department updated." });
+            try
+            {
+                var department = await _context.DepartmentMaster.FindAsync(id);
+
+                if (department == null)
+                {
+                    return NotFound(new ApiResponse<object>(0, "Department not found.", null));
+                }
+
+                // Update fields
+                department.DepCode = dto.DepCode;
+                department.DepartmentName = dto.DepartmentName;
+                department.HOD = dto.HOD;
+
+                _context.DepartmentMaster.Update(department);
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<object>(1, "Department updated successfully.", null));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
         }
 
         [HttpDelete("{id}")]
         [HasPermission("departments.delete")]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<ActionResult<ApiResponse<object>>> Delete(int id)
         {
-            await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_DeleteDepartment {id}");
-            return Ok(new { Message = "Department deleted." });
+            try
+            {
+                var department = await _context.DepartmentMaster.FindAsync(id);
+
+                if (department == null)
+                {
+                    return NotFound(new ApiResponse<object>(0, "Department not found.", null));
+                }
+
+                _context.DepartmentMaster.Remove(department);
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<object>(1, "Department deleted successfully.", null));
+            }
+            catch (Exception ex)
+            {
+                // Handle Foreign Key constraint errors (e.g., if employees are assigned to this dept)
+                if (ex.InnerException != null && ex.InnerException.Message.Contains("REFERENCE constraint"))
+                {
+                    return BadRequest(new ApiResponse<object>(0, "Cannot delete this department because it is assigned to employees.", null));
+                }
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
         }
     }
 }
