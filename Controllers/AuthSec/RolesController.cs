@@ -18,14 +18,10 @@ namespace TCBackend.Controllers.AuthSec
         public RolesController(TCDbContext context) { _context = context; }
 
 
-
-
-
         [HttpPost("postCreateRole")]
         [HasPermission("roles.manage")] // Only users who can manage roles can create them
         public async Task<IActionResult> CreateRole([FromBody] CreateRoleDto createRoleDto)
         {
-            // Check if a role with the same name already exists
             var roleExists = await _context.Roles.AnyAsync(r => r.Name == createRoleDto.Name);
             if (roleExists)
             {

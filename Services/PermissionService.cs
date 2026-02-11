@@ -23,9 +23,8 @@ namespace TCBackend.Services
                 return true;
             }
 
-            // Check if the user has the permission through their roles
             var hasPermission = await _context.UserRoles
-                .AsNoTracking() // Read-only query for performance
+                .AsNoTracking()
                 .Where(ur => ur.UserId == userId)
                 .Select(ur => ur.Role)
                 .SelectMany(r => r.RolePermissions)

@@ -23,6 +23,7 @@ namespace TCBackend.Dtos.LeaveSystem
         [Key]
         public int LeaveReqID { get; set; }
         public int? Tableid { get; set; }
+        public int? UserId { get; set; }
         public string? EmpCode { get; set; }
         public int LeaveTypeid { get; set; }
         public DateTime StartDate { get; set; }
@@ -143,6 +144,8 @@ namespace TCBackend.Dtos.LeaveSystem
         public int? ProcessByUserId { get; set; }
         public string? ProcessByCode { get; set; }
         public string? ProcessByName { get; set; }
+        public string? Icon { get; set; }
+        public string? ColorTheme { get; set; }
     }
 
     public class LeaveTypeMaster

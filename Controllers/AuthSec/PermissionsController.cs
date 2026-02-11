@@ -31,10 +31,9 @@ namespace TCBackend.Controllers.AuthSec
         }
 
         [HttpPost("postCreatePermission")]
-        [HasPermission("roles.manage")] // Creating permissions is part of role management
+        [HasPermission("roles.manage")] 
         public async Task<IActionResult> CreatePermission([FromBody] CreatePermissionDto createPermissionDto)
         {
-            // Check if a permission with the same name already exists
             var permissionExists = await _context.Permissions.AnyAsync(p => p.Name == createPermissionDto.Name);
             if (permissionExists)
             {

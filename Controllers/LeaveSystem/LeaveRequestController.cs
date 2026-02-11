@@ -13,6 +13,7 @@ using TCBackend.Authorization;
 using Dapper;
 using TCBackend.Dtos.Wrappers;
 using TCBackend.Services.IServices;
+using TCBackend.Model.LoginSecurity;
 namespace TCBackend.Controllers.LeaveSystem
 {
     [Route("api/[controller]")]
@@ -151,18 +152,37 @@ namespace TCBackend.Controllers.LeaveSystem
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> UpdateLeaveStatus([FromBody] ChangeLeaveProcessDto request)
         {
-            // 1. Basic Validation
             if (request.LeaveReqId <= 0 || request.ProcessId <= 0)
             {
                 return BadRequest(new ApiResponse<int>(0, "Invalid Data.", 0));
             }
 
-            // 2. (Optional) Role Validation Logic
-            // This ensures a Manager cannot perform an "HR Approval" action.
-            // RM Actions: 3 (Approve), 4 (Reject), 5 (Hold)
-            // HR Actions: 6 (Approve), 7 (Reject), 8 (Hold)
+            var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == request.LeaveReqId).FirstOrDefaultAsync();
 
-            /* Uncomment this block if you want strict security
+            if (leave == null) return NotFound(new ApiResponse<int>(0, "Leave not found", 0));
+
+            var approverId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+            if (request.ProcessId >= 3 && request.ProcessId <= 5) // RM Actions
+            {
+                bool isAdmin = false;
+                bool isAuthorizedManager = await _dbContext.Database
+                    .SqlQueryRaw<bool>("SELECT dbo.fn_IsManagerInHierarchy({0}, {1}) AS [Value]", leave.UserId, approverId)
+                    .FirstOrDefaultAsync();
+                
+                var user = await _dbContext.Users.FindAsync(approverId);
+                if (user?.IsSuperAdmin == true)
+                {
+                    isAdmin=true;
+                }
+
+                if (!isAuthorizedManager && !isAdmin)
+                {
+                    return StatusCode(200, new ApiResponse<int>(0, "Access Denied: You are not in the reporting hierarchy for this employee.", 0));
+                }
+            }
+            
+            /* 
             bool isHR = User.IsInRole("HR");
             if ((request.ProcessId >= 6 && request.ProcessId <= 8) && !isHR)
             {
@@ -172,7 +192,45 @@ namespace TCBackend.Controllers.LeaveSystem
             return await changeProcess(request.LeaveReqId, request.ProcessId, request.Remarks);
         }
 
+        //[HttpGet("canApprove/{leaveReqId}")]
+        //[Authorize]
+        //public async Task<ActionResult<ApiResponse<bool>>> CanApprove(int leaveReqId)
+        //{
+        //    try
+        //    {
+        //        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
+        //        if (User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole("HR"))
+        //        {
+        //            return Ok(new ApiResponse<bool>(1, "Admin/HR Override", true));
+        //        }
+
+        //        var applicantId = await _dbContext.LeaveRequestMaster
+        //            .Where(l => l.LeaveReqID == leaveReqId)
+        //            .Select(l => l.UserId)
+        //            .FirstOrDefaultAsync();
+
+        //        if (applicantId == 0)
+        //        {
+        //            return NotFound(new ApiResponse<bool>(0, "Leave Request not found", false));
+        //        }
+
+        //        if (applicantId == currentUserId)
+        //        {
+        //            return Ok(new ApiResponse<bool>(1, "Cannot approve own leave", false));
+        //        }
+
+        //        bool isManager = await _dbContext.Database
+        //            .SqlQueryRaw<bool>("SELECT CAST(dbo.fn_IsManagerInHierarchy({0}, {1}) AS BIT) AS [Value]", applicantId, currentUserId)
+        //            .FirstOrDefaultAsync();
+
+        //        return Ok(new ApiResponse<bool>(1, "Success", isManager));
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(500, new ApiResponse<bool>(0, $"Error: {ex.Message}", false));
+        //    }
+        //}
 
         //[HttpPost("postLeaveApprovedByRM")]
         //public async Task<IActionResult> LeaveApprovedByRM(int LeaveReqId)
