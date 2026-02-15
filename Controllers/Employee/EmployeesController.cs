@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -7,6 +8,7 @@ using System.Security.Claims;
 using TCBackend.Authorization;
 using TCBackend.Data;
 using TCBackend.Dtos.Home;
+using TCBackend.Dtos.Wrappers;
 using TCBackend.Services.IServices;
 
 namespace TCBackend.Controllers.Employee
@@ -18,17 +20,34 @@ namespace TCBackend.Controllers.Employee
     {
         private readonly TCDbContext _context;
         private readonly IEncryptionService _encryptionService;
+        private readonly IWebHostEnvironment _env;
 
-        public EmployeesController(TCDbContext context, IEncryptionService encryptionService)
+        public EmployeesController(TCDbContext context, IEncryptionService encryptionService,IWebHostEnvironment env)
         {
             _context = context;
             _encryptionService = encryptionService;
+            _env = env;
         }
 
         [HttpPost("CreateEmployee")]
         [HasPermission("employees.create")]
-        public async Task<IActionResult> CreateEmployee([FromBody] CreateEmployeeDto dto)
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<ApiResponse<int>>> CreateEmployee([FromForm] CreateEmployeeDto dto)
         {
+            if (dto.Photo != null)
+            {
+                if (dto.Photo.Length > 2 * 1024 * 1024)
+                {
+                    return BadRequest(new ApiResponse<int>(0, "File size must be less than 2MB.", 0));
+                }
+                var allowedTypes = new[] { "image/jpeg", "image/jpg", "image/png" };
+                if (!allowedTypes.Contains(dto.Photo.ContentType.ToLower()))
+                {
+                    return BadRequest(new ApiResponse<int>(0, "Invalid file type. Only JPG, JPEG, and PNG are allowed.", 0));
+                }
+            }
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -36,7 +55,6 @@ namespace TCBackend.Controllers.Employee
                 var encryptedPan = dto.PAN == null ? null : _encryptionService.Encrypt(dto.PAN);
                 var encryptedAadhaar = dto.AadhaarCard == null ? null : _encryptionService.Encrypt(dto.AadhaarCard);
                 var encryptedBankAccount = dto.BankAccountNumber == null ? null : _encryptionService.Encrypt(dto.BankAccountNumber);
-
                 var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
                 var newEmployeeIdParam = new SqlParameter("@NewEmployeeId", System.Data.SqlDbType.Int) { Direction = System.Data.ParameterDirection.Output };
@@ -56,7 +74,7 @@ namespace TCBackend.Controllers.Employee
                         new SqlParameter("@DateOfBirth", dto.DateOfBirth),
                         new SqlParameter("@Gender", dto.Gender),
                         new SqlParameter("@Address", (object)dto.Address ?? DBNull.Value),
-                        new SqlParameter("@PhotoUrl", (object)dto.PhotoUrl ?? DBNull.Value),
+                        new SqlParameter("@PhotoUrl", DBNull.Value),
                         new SqlParameter("@Email", dto.Email),
                         new SqlParameter("@PhoneNumber", (object)dto.PhoneNumber ?? DBNull.Value),
                         new SqlParameter("@HireDate", dto.HireDate),
@@ -78,22 +96,50 @@ namespace TCBackend.Controllers.Employee
                 if ((int)statusIdParam.Value != 1)
                 {
                     await transaction.RollbackAsync();
-                    return BadRequest(new { Message = messageParam.Value.ToString() });
+                    return BadRequest(new ApiResponse<int>(0, messageParam.Value.ToString(), 0));
+                }
+                int newEmployeeId = (int)newEmployeeIdParam.Value;
+
+
+                if (dto.Photo != null && dto.Photo.Length > 0)
+                {
+                    try
+                    {
+                        string folderPath = Path.Combine(_env.WebRootPath, "EmployeePhotos", newEmployeeId.ToString());
+
+                        if (!Directory.Exists(folderPath))
+                        {
+                            Directory.CreateDirectory(folderPath);
+                        }
+                        string uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.Photo.FileName);
+                        string fullPath = Path.Combine(folderPath, uniqueFileName);
+                        using (var stream = new FileStream(fullPath, FileMode.Create))
+                        {
+                            await dto.Photo.CopyToAsync(stream);
+                        }
+                        string dbPath = $"/EmployeePhotos/{newEmployeeId}/{uniqueFileName}";
+                        await _context.Database.ExecuteSqlInterpolatedAsync(
+                            $"UPDATE EmpMaster SET PhotoUrl = {dbPath} WHERE UserId = {newEmployeeId}"
+                        );
+                    }
+                    catch (Exception)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new Exception("Failed to upload photo. Employee creation aborted.");
+                    }
                 }
 
                 if (dto.ReportingManagerId.HasValue)
                 {
-                    var newEmployeeId = (int)newEmployeeIdParam.Value;
-
                     var managerStatusIdParam = new SqlParameter("@statusId", System.Data.SqlDbType.Int) { Direction = System.Data.ParameterDirection.Output };
                     var managerMessageParam = new SqlParameter("@Message", System.Data.SqlDbType.NVarChar, 256) { Direction = System.Data.ParameterDirection.Output };
 
                     var assignParams = new[] {
-                new SqlParameter("@EmployeeId", newEmployeeId),
-                new SqlParameter("@ManagerId", dto.ReportingManagerId.Value),
-                managerStatusIdParam,
-                managerMessageParam
-            };
+                        new SqlParameter("@EmployeeId", newEmployeeId),
+                        new SqlParameter("@ManagerId", dto.ReportingManagerId.Value),
+                        managerStatusIdParam,
+                        managerMessageParam
+                    };
 
                     await _context.Database.ExecuteSqlRawAsync("EXEC sp_AssignManager @EmployeeId, @ManagerId, @statusId OUT, @Message OUT", assignParams);
 
@@ -105,12 +151,12 @@ namespace TCBackend.Controllers.Employee
                 }
 
                 await transaction.CommitAsync();
-                return Ok(new { Message = messageParam.Value.ToString() });
+                return Ok(new ApiResponse<int>(1, messageParam.Value.ToString(), newEmployeeId));
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return StatusCode(500, $"An internal server error occurred: {ex.Message}");
+                return StatusCode(500, new ApiResponse<int>(0, $"Internal Server Error: {ex.Message}", 0));
             }
         }
 

@@ -14,6 +14,7 @@ using Dapper;
 using TCBackend.Dtos.Wrappers;
 using TCBackend.Services.IServices;
 using TCBackend.Model.LoginSecurity;
+using System.Reflection.PortableExecutable;
 namespace TCBackend.Controllers.LeaveSystem
 {
     [Route("api/[controller]")]
@@ -24,11 +25,13 @@ namespace TCBackend.Controllers.LeaveSystem
         private TCDbContext _dbContext;
         private readonly EmailService _emailService;
         private readonly IPermissionService _permissionService;
-        public LeaveRequestController(TCDbContext context, EmailService emailService, IPermissionService permissionService)
+        private readonly IWebHostEnvironment _env;
+        public LeaveRequestController(TCDbContext context, EmailService emailService, IPermissionService permissionService, IWebHostEnvironment env)
         {
             _dbContext = context;
             _emailService = emailService;
             _permissionService = permissionService;
+            _env = env;
         }
         [HttpGet("test")]
         public async Task<IActionResult> test()
@@ -113,15 +116,35 @@ namespace TCBackend.Controllers.LeaveSystem
 
                 using (var multi = await connection.QueryMultipleAsync("sp_GetLeaveRequestDetails", parameters, commandType: CommandType.StoredProcedure))
                 {
-                    response.Header = await multi.ReadFirstOrDefaultAsync<LeaveRequestHeaderDto>();
+                    var header = await multi.ReadFirstOrDefaultAsync<LeaveRequestHeaderDto>();
 
-                    if (response.Header == null)
+                    if (header == null)
                     {
                         return NotFound("Leave Request not found.");
                     }
 
                     var days = await multi.ReadAsync<LeaveRequestDayDto>();
                     response.Days = days.ToList();
+
+                    if (!string.IsNullOrEmpty(header.PhotoUrl))
+                    {
+                        try
+                        {
+                            var relativePath = header.PhotoUrl.TrimStart('/', '\\');
+                            var fullPath = Path.Combine(_env.WebRootPath, relativePath);
+
+                            if (System.IO.File.Exists(fullPath))
+                            {
+                                header.Photo = await System.IO.File.ReadAllBytesAsync(fullPath);
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            header.Photo = null;
+                        }
+                    }
+                    response.Header = header;
+
                 }
 
                 return Ok(response);
@@ -163,7 +186,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
             var approverId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
-            if (request.ProcessId >= 3 && request.ProcessId <= 5) // RM Actions
+            if (request.ProcessId == 3)
             {
                 bool isAdmin = false;
                 bool isAuthorizedManager = await _dbContext.Database

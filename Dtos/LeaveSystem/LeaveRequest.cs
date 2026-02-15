@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace TCBackend.Dtos.LeaveSystem
 {
@@ -172,6 +173,9 @@ namespace TCBackend.Dtos.LeaveSystem
         public int LeaveReqID { get; set; }
         public string? EmpCode { get; set; }
         public string? EmployeeName { get; set; }
+        [JsonIgnore]
+        public string? PhotoUrl { get; set; }
+        public byte[]? Photo { get; set; }
         public string? LeaveType { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
