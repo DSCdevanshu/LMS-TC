@@ -215,6 +215,95 @@ namespace TCBackend.Controllers.LeaveSystem
             return await changeProcess(request.LeaveReqId, request.ProcessId, request.Remarks);
         }
 
+
+        [HttpGet("getAvailableActions/{leaveReqId}")]
+        [ProducesResponseType(typeof(ApiResponse<List<LeaveActionButtonDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAvailableActions(int leaveReqId)
+        {
+            try
+            {
+                var leave = await _dbContext.LeaveRequestMaster
+                    .Where(l => l.LeaveReqID == leaveReqId)
+                    .Select(l => new { l.UserId, l.ProcessId })
+                    .FirstOrDefaultAsync();
+
+                if (leave == null)
+                {
+                    return NotFound(new ApiResponse<object>(0, "Leave request not found.", null));
+                }
+
+                int currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+                bool isApplicant = (currentUserId == leave.UserId);
+                bool isAdmin = false;
+
+                var user = await _dbContext.Users.FindAsync(currentUserId);
+                if (user?.IsSuperAdmin == true)
+                {
+                    isAdmin = true;
+                }
+                bool isHR = User.IsInRole("HR") || User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
+
+                bool isManager = false;
+                if (!isApplicant)
+                {
+                    isManager = await _dbContext.Database
+                        .SqlQueryRaw<bool>("SELECT CAST(dbo.fn_IsManagerInHierarchy({0}, {1}) AS BIT) AS [Value]", leave.UserId, currentUserId)
+                        .FirstOrDefaultAsync();
+                }
+
+                var buttons = new List<LeaveActionButtonDto>();
+
+                switch (leave.ProcessId)
+                {
+                    case 1:
+                        if (isApplicant)
+                        {
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 2, ButtonName = "Send Request", ColorTheme = "blue" });
+                        }
+                        break;
+
+                    case 2:
+                        if (isManager || isAdmin)
+                        {
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 3, ButtonName = "Approve", ColorTheme = "green" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 4, ButtonName = "Reject", ColorTheme = "red" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 5, ButtonName = "Hold", ColorTheme = "yellow" });
+                        }
+                        break;
+
+                    case 3:
+                        if (isHR)
+                        {
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 6, ButtonName = "Final Approve", ColorTheme = "green" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 7, ButtonName = "Reject", ColorTheme = "red" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 8, ButtonName = "Hold", ColorTheme = "yellow" });
+                        }
+                        break;
+
+                    case 5: // HOLD BY RM
+                    case 8: // HOLD BY HR
+                        if (isApplicant)
+                        {
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 1, ButtonName = "Modify (Move to Draft)", ColorTheme = "gray" });
+                        }
+                        break;
+
+                    case 4: // REJECTED BY RM
+                    case 6: // APPROVED BY HR (Final)
+                    case 7: // REJECTED BY HR
+                            // Terminal states - No actions available usually.
+                        break;
+                }
+
+                return Ok(new ApiResponse<List<LeaveActionButtonDto>>(1, "Success", buttons));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
+        }
+
+
         //[HttpGet("canApprove/{leaveReqId}")]
         //[Authorize]
         //public async Task<ActionResult<ApiResponse<bool>>> CanApprove(int leaveReqId)

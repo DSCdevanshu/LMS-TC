@@ -173,6 +173,8 @@ namespace TCBackend.Dtos.LeaveSystem
         public int LeaveReqID { get; set; }
         public string? EmpCode { get; set; }
         public string? EmployeeName { get; set; }
+        public string? DepartmentName { get; set; }
+        public string? Designation { get; set; }
         [JsonIgnore]
         public string? PhotoUrl { get; set; }
         public byte[]? Photo { get; set; }
@@ -197,5 +199,10 @@ namespace TCBackend.Dtos.LeaveSystem
         public int ProcessId { get; set; }
         public string? Remarks { get; set; }
     }
-
+    public class LeaveActionButtonDto
+    {
+        public int ProcessId { get; set; }
+        public string ButtonName { get; set; }
+        public string ColorTheme { get; set; }
+    }
 }
