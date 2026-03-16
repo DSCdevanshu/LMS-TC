@@ -23,13 +23,23 @@ namespace TCBackend.Services
                 return true;
             }
 
-            var hasPermission = await _context.UserRoles
+            //var hasPermission = await _context.UserRoles
+            //    .AsNoTracking()
+            //    .Where(ur => ur.UserId == userId)
+            //    .Select(ur => ur.Role)
+            //    .SelectMany(r => r.RolePermissions)
+            //    .Select(rp => rp.Permission)
+            //    .AnyAsync(p => p.Name == permission);
+            var hasPermission = await _context.Users
                 .AsNoTracking()
-                .Where(ur => ur.UserId == userId)
-                .Select(ur => ur.Role)
-                .SelectMany(r => r.RolePermissions)
-                .Select(rp => rp.Permission)
-                .AnyAsync(p => p.Name == permission);
+                .Where(u => u.Id == userId)
+                .AnyAsync(u =>
+                    // Condition A: It exists in one of their Roles
+                    u.UserRoles.SelectMany(ur => ur.Role.RolePermissions).Any(rp => rp.Permission.Name == permission)
+                    ||
+                    // Condition B: It exists directly on the User
+                    u.UserPermissions.Any(up => up.Permission.Name == permission)
+                );
 
             return hasPermission;
         }

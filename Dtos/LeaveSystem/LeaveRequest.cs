@@ -175,9 +175,7 @@ namespace TCBackend.Dtos.LeaveSystem
         public string? EmployeeName { get; set; }
         public string? DepartmentName { get; set; }
         public string? Designation { get; set; }
-        [JsonIgnore]
         public string? PhotoUrl { get; set; }
-        public byte[]? Photo { get; set; }
         public string? LeaveType { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }

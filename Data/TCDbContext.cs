@@ -8,9 +8,9 @@ using TCBackend.Model.LoginSecurity;
 
 namespace TCBackend.Data
 {
-    public class TCDbContext:DbContext
+    public class TCDbContext : DbContext
     {
-        public TCDbContext(DbContextOptions<TCDbContext> option):base(option) { }
+        public TCDbContext(DbContextOptions<TCDbContext> option) : base(option) { }
 
         //-------------Roles & Permission-------------
         public DbSet<User> Users { get; set; }
@@ -18,9 +18,12 @@ namespace TCBackend.Data
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<MenuItem> MenuItems { get; set; }
         public DbSet<EmployeeDetailView> EmployeeDetails { get; set; }
         public DbSet<Designation> DesignationMaster { get; set; }
+        public DbSet<EmpMaster> EmpMaster { get; set; }
+        public DbSet<StatusMasterDto> StatusMaster { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -52,6 +55,19 @@ namespace TCBackend.Data
                 .HasOne(rp => rp.Permission)
                 .WithMany(p => p.RolePermissions)
                 .HasForeignKey(rp => rp.PermissionId);
+            
+            modelBuilder.Entity<UserPermission>()
+                .HasKey(up => new { up.UserId, up.PermissionId });
+
+            modelBuilder.Entity<UserPermission>()
+                .HasOne(up => up.User)
+                .WithMany(u => u.UserPermissions)
+                .HasForeignKey(up => up.UserId);
+
+            modelBuilder.Entity<UserPermission>()
+                .HasOne(up => up.Permission)
+                .WithMany(p => p.UserPermissions)
+                .HasForeignKey(up => up.PermissionId);
 
             modelBuilder.Entity<EmployeeDetailView>(eb =>
             {
@@ -82,7 +98,7 @@ namespace TCBackend.Data
         public DbSet<PageMaster> PageMaster { get; set; }
         public DbSet<SpLeaveRequestResult> SpLeaveRequestResult { get; set; }
         public DbSet<SpLeaveRequestResultV2> SpLeaveRequestResultsV2 { get; set; }
-        
+
         public DbSet<UserCalendarDataDto> sp_GetUserCalendarData { get; set; }
     }
 }

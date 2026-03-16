@@ -26,12 +26,14 @@ namespace TCBackend.Controllers.LeaveSystem
         private readonly EmailService _emailService;
         private readonly IPermissionService _permissionService;
         private readonly IWebHostEnvironment _env;
-        public LeaveRequestController(TCDbContext context, EmailService emailService, IPermissionService permissionService, IWebHostEnvironment env)
+        private readonly IStorageService _storageService;
+        public LeaveRequestController(TCDbContext context, EmailService emailService, IPermissionService permissionService, IWebHostEnvironment env, IStorageService storageService)
         {
             _dbContext = context;
             _emailService = emailService;
             _permissionService = permissionService;
             _env = env;
+            _storageService = storageService;
         }
         [HttpGet("test")]
         public async Task<IActionResult> test()
@@ -126,23 +128,24 @@ namespace TCBackend.Controllers.LeaveSystem
                     var days = await multi.ReadAsync<LeaveRequestDayDto>();
                     response.Days = days.ToList();
 
-                    if (!string.IsNullOrEmpty(header.PhotoUrl))
-                    {
-                        try
-                        {
-                            var relativePath = header.PhotoUrl.TrimStart('/', '\\');
-                            var fullPath = Path.Combine(_env.WebRootPath, relativePath);
+                    header.PhotoUrl = await _storageService.GetSecureFileUrlAsync(header.PhotoUrl);
+                    //if (!string.IsNullOrEmpty(header.PhotoUrl))
+                    //{
+                    //    try
+                    //    {
+                    //        var relativePath = header.PhotoUrl.TrimStart('/', '\\');
+                    //        var fullPath = Path.Combine(_env.WebRootPath, relativePath);
 
-                            if (System.IO.File.Exists(fullPath))
-                            {
-                                header.Photo = await System.IO.File.ReadAllBytesAsync(fullPath);
-                            }
-                        }
-                        catch (Exception)
-                        {
-                            header.Photo = null;
-                        }
-                    }
+                    //        if (System.IO.File.Exists(fullPath))
+                    //        {
+                    //            header.Photo = await System.IO.File.ReadAllBytesAsync(fullPath);
+                    //        }
+                    //    }
+                    //    catch (Exception)
+                    //    {
+                    //        header.Photo = null;
+                    //    }
+                    //}
                     response.Header = header;
 
                 }

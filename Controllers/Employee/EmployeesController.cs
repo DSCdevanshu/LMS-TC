@@ -1,14 +1,18 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Dapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using System.Data;
 using System.Security.Claims;
 using TCBackend.Authorization;
 using TCBackend.Data;
 using TCBackend.Dtos.Home;
 using TCBackend.Dtos.Wrappers;
+using TCBackend.Services;
 using TCBackend.Services.IServices;
 
 namespace TCBackend.Controllers.Employee
@@ -21,12 +25,16 @@ namespace TCBackend.Controllers.Employee
         private readonly TCDbContext _context;
         private readonly IEncryptionService _encryptionService;
         private readonly IWebHostEnvironment _env;
+        private readonly IPermissionService _permissionService;
+        private readonly IStorageService _storageService;
 
-        public EmployeesController(TCDbContext context, IEncryptionService encryptionService,IWebHostEnvironment env)
+        public EmployeesController(TCDbContext context, IEncryptionService encryptionService,IWebHostEnvironment env, IPermissionService permissionService, IStorageService storageService)
         {
             _context = context;
             _encryptionService = encryptionService;
             _env = env;
+            _permissionService = permissionService;
+            _storageService = storageService;
         }
 
         [HttpPost("CreateEmployee")]
@@ -48,8 +56,10 @@ namespace TCBackend.Controllers.Employee
                     return BadRequest(new ApiResponse<int>(0, "Invalid file type. Only JPG, JPEG, and PNG are allowed.", 0));
                 }
             }
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open) await connection.OpenAsync();
 
+            using var transaction = connection.BeginTransaction();
             try
             {
                 var encryptedPan = dto.PAN == null ? null : _encryptionService.Encrypt(dto.PAN);
@@ -57,101 +67,79 @@ namespace TCBackend.Controllers.Employee
                 var encryptedBankAccount = dto.BankAccountNumber == null ? null : _encryptionService.Encrypt(dto.BankAccountNumber);
                 var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
-                var newEmployeeIdParam = new SqlParameter("@NewEmployeeId", System.Data.SqlDbType.Int) { Direction = System.Data.ParameterDirection.Output };
-                var statusIdParam = new SqlParameter("@StatusId", System.Data.SqlDbType.Int) { Direction = System.Data.ParameterDirection.Output };
-                var messageParam = new SqlParameter("@Message", System.Data.SqlDbType.NVarChar, 255) { Direction = System.Data.ParameterDirection.Output };
+                var p = new DynamicParameters();
+                p.Add("@Username", dto.Username);
+                p.Add("@PasswordHash", passwordHash);
+                p.Add("@EmpCode", dto.EmpCode);
+                p.Add("@FirstName", dto.FirstName);
+                p.Add("@MiddleName", dto.MiddleName);
+                p.Add("@LastName", dto.LastName);
+                p.Add("@FathersName", dto.FathersName);
+                p.Add("@MothersName", dto.MothersName);
+                p.Add("@DateOfBirth", dto.DateOfBirth);
+                p.Add("@Gender", dto.Gender);
+                p.Add("@Address", dto.Address);
+                p.Add("@PhotoUrl", null);
+                p.Add("@Email", dto.Email);
+                p.Add("@PhoneNumber", dto.PhoneNumber);
+                p.Add("@HireDate", dto.HireDate);
+                p.Add("@DesignationId", dto.DesignationId);
+                p.Add("@DepartmentId", dto.DepartmentId);
+                p.Add("@PAN_Encrypted", encryptedPan);
+                p.Add("@Aadhaar_Encrypted", encryptedAadhaar);
+                p.Add("@BankAccount_Encrypted", encryptedBankAccount);
 
-                var createParams = new List<SqlParameter>
-                    {
-                        new SqlParameter("@Username", dto.Username),
-                        new SqlParameter("@PasswordHash", passwordHash),
-                        new SqlParameter("@EmpCode", dto.EmpCode),
-                        new SqlParameter("@FirstName", dto.FirstName),
-                        new SqlParameter("@MiddleName", (object)dto.MiddleName ?? DBNull.Value),
-                        new SqlParameter("@LastName", dto.LastName),
-                        new SqlParameter("@FathersName", (object)dto.FathersName ?? DBNull.Value),
-                        new SqlParameter("@MothersName", (object)dto.MothersName ?? DBNull.Value),
-                        new SqlParameter("@DateOfBirth", dto.DateOfBirth),
-                        new SqlParameter("@Gender", dto.Gender),
-                        new SqlParameter("@Address", (object)dto.Address ?? DBNull.Value),
-                        new SqlParameter("@PhotoUrl", DBNull.Value),
-                        new SqlParameter("@Email", dto.Email),
-                        new SqlParameter("@PhoneNumber", (object)dto.PhoneNumber ?? DBNull.Value),
-                        new SqlParameter("@HireDate", dto.HireDate),
-                        new SqlParameter("@DesignationId", dto.DesignationId),
-                        new SqlParameter("@DepartmentId", dto.DepartmentId),
-                        new SqlParameter("@PAN_Encrypted", (object)encryptedPan ?? DBNull.Value),
-                        new SqlParameter("@Aadhaar_Encrypted", (object)encryptedAadhaar ?? DBNull.Value),
-                        new SqlParameter("@BankAccount_Encrypted", (object)encryptedBankAccount ?? DBNull.Value),
-                        newEmployeeIdParam,
-                        statusIdParam,
-                        messageParam
-                    };
+                p.Add("@NewEmployeeId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                p.Add("@StatusId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                p.Add("@Message", dbType: DbType.String, size: 255, direction: ParameterDirection.Output);
 
-                await _context.Database.ExecuteSqlRawAsync(
-                    "EXEC sp_CreateNewEmployee @Username, @PasswordHash, @EmpCode, @FirstName, @MiddleName, @LastName, @FathersName, @MothersName, @DateOfBirth, @Gender, @Address, @PhotoUrl, @Email, @PhoneNumber, @HireDate, @DesignationId, @DepartmentId, @PAN_Encrypted, @Aadhaar_Encrypted, @BankAccount_Encrypted, @NewEmployeeId OUT, @StatusId OUT, @Message OUT",
-                    createParams
-                );
 
-                if ((int)statusIdParam.Value != 1)
+
+                await connection.ExecuteAsync("sp_CreateNewEmployee", p, transaction, commandType: CommandType.StoredProcedure);
+                int statusId = p.Get<int>("@StatusId");
+                string message = p.Get<string>("@Message");
+
+                if (statusId != 1)
                 {
-                    await transaction.RollbackAsync();
-                    return BadRequest(new ApiResponse<int>(0, messageParam.Value.ToString(), 0));
+                    transaction.Rollback();
+                    return BadRequest(new ApiResponse<int>(0, message, 0));
                 }
-                int newEmployeeId = (int)newEmployeeIdParam.Value;
-
+                int newEmployeeId = p.Get<int>("@NewEmployeeId");
 
                 if (dto.Photo != null && dto.Photo.Length > 0)
                 {
-                    try
-                    {
-                        string folderPath = Path.Combine(_env.WebRootPath, "EmployeePhotos", newEmployeeId.ToString());
-
-                        if (!Directory.Exists(folderPath))
-                        {
-                            Directory.CreateDirectory(folderPath);
-                        }
-                        string uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.Photo.FileName);
-                        string fullPath = Path.Combine(folderPath, uniqueFileName);
-                        using (var stream = new FileStream(fullPath, FileMode.Create))
-                        {
-                            await dto.Photo.CopyToAsync(stream);
-                        }
-                        string dbPath = $"/EmployeePhotos/{newEmployeeId}/{uniqueFileName}";
-                        await _context.Database.ExecuteSqlInterpolatedAsync(
-                            $"UPDATE EmpMaster SET PhotoUrl = {dbPath} WHERE UserId = {newEmployeeId}"
+                    string folderName = $"EmployeePhotos/{newEmployeeId}";
+                    string dbPath = await _storageService.SaveFileAsync(dto.Photo, folderName);
+                    await connection.ExecuteAsync(
+                            "UPDATE EmpMaster SET PhotoUrl = @PhotoUrl WHERE UserId = @UserId",
+                            new { PhotoUrl = dbPath, UserId = newEmployeeId },
+                            transaction
                         );
-                    }
-                    catch (Exception)
-                    {
-                        await transaction.RollbackAsync();
-                        throw new Exception("Failed to upload photo. Employee creation aborted.");
-                    }
+                    
                 }
 
-                if (dto.ReportingManagerId.HasValue)
+                if (dto.ReportingManagerIds != null && dto.ReportingManagerIds.Any())
                 {
-                    var managerStatusIdParam = new SqlParameter("@statusId", System.Data.SqlDbType.Int) { Direction = System.Data.ParameterDirection.Output };
-                    var managerMessageParam = new SqlParameter("@Message", System.Data.SqlDbType.NVarChar, 256) { Direction = System.Data.ParameterDirection.Output };
-
-                    var assignParams = new[] {
-                        new SqlParameter("@EmployeeId", newEmployeeId),
-                        new SqlParameter("@ManagerId", dto.ReportingManagerId.Value),
-                        managerStatusIdParam,
-                        managerMessageParam
-                    };
-
-                    await _context.Database.ExecuteSqlRawAsync("EXEC sp_AssignManager @EmployeeId, @ManagerId, @statusId OUT, @Message OUT", assignParams);
-
-                    if ((int)managerStatusIdParam.Value != 1)
+                    foreach (var managerId in dto.ReportingManagerIds.Distinct())
                     {
-                        await transaction.RollbackAsync();
-                        return BadRequest(new { Message = managerMessageParam.Value.ToString() });
+                        var mgrParams = new DynamicParameters();
+                        mgrParams.Add("@EmployeeId", newEmployeeId);
+                        mgrParams.Add("@ManagerId", managerId);
+                        mgrParams.Add("@statusId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                        mgrParams.Add("@Message", dbType: DbType.String, size: 256, direction: ParameterDirection.Output);
+
+                        await connection.ExecuteAsync("sp_AssignManager", mgrParams, transaction, commandType: CommandType.StoredProcedure);
+
+                        if (mgrParams.Get<int>("@statusId") != 1)
+                        {
+                            transaction.Rollback();
+                            return BadRequest(new ApiResponse<int>(0, $"Manager Assignment Failed: {mgrParams.Get<string>("@Message")}", 0));
+                        }
                     }
                 }
 
-                await transaction.CommitAsync();
-                return Ok(new ApiResponse<int>(1, messageParam.Value.ToString(), newEmployeeId));
+                transaction.Commit();
+                return Ok(new ApiResponse<int>(1, message, newEmployeeId));
             }
             catch (Exception ex)
             {
@@ -162,97 +150,246 @@ namespace TCBackend.Controllers.Employee
 
 
 
-
-        [HttpPut("updateEmployee{employeeId}")]
-        [HasPermission("employees.update.all")]
+        [HttpPut("UpdateEmployee/{employeeId}")]
+        [HasPermission("employees.update")]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
         public async Task<IActionResult> UpdateEmployee(int employeeId, [FromBody] UpdateEmployeeDto dto)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var employee = await _context.EmpMaster.FirstOrDefaultAsync(e => e.UserId == employeeId);
+                if (employee == null)
+                {
+                    return NotFound(new ApiResponse<int>(0, "Employee not found.", 0));
+                }
+
+                employee.FirstName = dto.FirstName;
+                employee.MiddleName = dto.MiddleName;
+                employee.LastName = dto.LastName;
+                employee.EmailID = dto.Email;
+                employee.Mobile = dto.Mobile;
+                employee.DepartmentId = dto.DepartmentId;
+                employee.DesignationId = dto.DesignationId;
+                employee.Address = dto.Address;
+
+                if (!string.IsNullOrEmpty(dto.PAN))
+                    employee.PAN = _encryptionService.Encrypt(dto.PAN);
+
+                if (!string.IsNullOrEmpty(dto.AadhaarCard))
+                    employee.AadhaarCard = _encryptionService.Encrypt(dto.AadhaarCard);
+
+                if (!string.IsNullOrEmpty(dto.BankAccountNumber))
+                    employee.BankAccountNumber = _encryptionService.Encrypt(dto.BankAccountNumber);
+
+                await _context.SaveChangesAsync();
+
+                if (dto.ReportingManagerIds != null)
+                {
+                    var connection = _context.Database.GetDbConnection();
+                    var dbTransaction = transaction.GetDbTransaction();
+
+                    var newManagerIds = dto.ReportingManagerIds.Distinct().ToList();
+
+                    var currentManagerIds = await connection.QueryAsync<int>(
+                        "SELECT ManagerId FROM ReportingHierarchy WHERE EmployeeId = @EmployeeId",
+                        new { EmployeeId = employeeId },
+                        dbTransaction);
+
+                    var managersToRemove = currentManagerIds.Except(newManagerIds).ToList();
+                    foreach (var rmId in managersToRemove)
+                    {
+                        await connection.ExecuteAsync("sp_RemoveManager",
+                            new { EmployeeId = employeeId, ManagerId = rmId },
+                            dbTransaction,
+                            commandType: CommandType.StoredProcedure);
+                    }
+
+                    var managersToAdd = newManagerIds.Except(currentManagerIds).ToList();
+                    foreach (var addId in managersToAdd)
+                    {
+                        var mgrParams = new DynamicParameters();
+                        mgrParams.Add("@EmployeeId", employeeId);
+                        mgrParams.Add("@ManagerId", addId);
+                        mgrParams.Add("@statusId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                        mgrParams.Add("@Message", dbType: DbType.String, size: 256, direction: ParameterDirection.Output);
+
+                        await connection.ExecuteAsync("sp_AssignManager", mgrParams, dbTransaction, commandType: CommandType.StoredProcedure);
+
+                        if (mgrParams.Get<int>("@statusId") != 1)
+                        {
+                            throw new Exception(mgrParams.Get<string>("@Message"));
+                        }
+                    }
+                }
+
+                await transaction.CommitAsync();
+                return Ok(new ApiResponse<int>(1, "Employee updated successfully.", employeeId));
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new ApiResponse<int>(0, $"Internal Server Error: {ex.Message}", 0));
+            }
+        }
+
+
+        [HttpPut("UpdateEmployeePhoto/{employeeId}")]
+        [HasPermission("employees.update")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateEmployeePhoto(int employeeId, IFormFile photo)
+        {
+            if (photo == null || photo.Length == 0)
+                return BadRequest(new ApiResponse<string>(0, "No photo uploaded.", null));
+
+            if (photo.Length > 2 * 1024 * 1024)
+                return BadRequest(new ApiResponse<string>(0, "File size must be less than 2MB.", null));
+
+            var allowedTypes = new[] { "image/jpeg", "image/jpg", "image/png" };
+            if (!allowedTypes.Contains(photo.ContentType.ToLower()))
+                return BadRequest(new ApiResponse<string>(0, "Invalid file type. Only JPG, JPEG, and PNG are allowed.", null));
+
+            try
+            {
+                var employee = await _context.EmpMaster.FirstOrDefaultAsync(e => e.UserId == employeeId);
+
+                if (employee == null)
+                {
+                    return NotFound(new ApiResponse<string>(0, "Employee not found.", null));
+                }
+                string folderName = $"EmployeePhotos/{employeeId}";
+                string newDbPath = await _storageService.SaveFileAsync(photo, folderName);
+
+                employee.PhotoUrl = newDbPath;
+                await _context.SaveChangesAsync();
+                string secureUrl = await _storageService.GetSecureFileUrlAsync(newDbPath);
+
+                return Ok(new ApiResponse<string>(1, "Photo updated successfully.", secureUrl));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
+            }
+        }
+
+
+
+        [HttpPost("GetEmployeeList")]
+        [HasPermission("employees.read.team")]
+        [ProducesResponseType(typeof(ApiResponse<IEnumerable<dynamic>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetEmployeeList([FromBody] EmployeeFilterDto filter)
         {
             try
             {
-                var parameters = new[]
+                int loginUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+                bool viewAll = await _permissionService.HasPermissionAsync(loginUserId, "employees.read.all");
+
+                var p = new DynamicParameters();
+                p.Add("@LoginUserId", loginUserId);
+                p.Add("@ViewAll", viewAll ? 1 : 0);
+                p.Add("@SearchText", filter.SearchText);
+                p.Add("@DepartmentId", filter.DepartmentId);
+                p.Add("@DesignationId", filter.DesignationId);
+                p.Add("@Status", filter.Status);
+                p.Add("@HireDateFrom", filter.HireDateFrom);
+                p.Add("@HireDateTo", filter.HireDateTo);
+
+                var connection = _context.Database.GetDbConnection();
+                var list = await connection.QueryAsync(
+                    "sp_GetEmployeeGrid",
+                    p,
+                    commandType: CommandType.StoredProcedure
+                );
+
+                return Ok(new ApiResponse<IEnumerable<dynamic>>(1, "Success", list));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
+            }
+        }
+
+        [HttpGet("GetEmployeeById/{employeeId}")]
+        [HasPermission("employees.read.team")]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeDetailsDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetEmployeeById(int employeeId)
+        {
+            try
+            {
+                var employeeView = await _context.EmployeeDetails
+                    .FirstOrDefaultAsync(e => e.UserId == employeeId);
+
+                if (employeeView == null)
                 {
-                    new SqlParameter("@UserId", employeeId),
-                    new SqlParameter("@FirstName", dto.FirstName),
-                    new SqlParameter("@LastName", dto.LastName),
-                    new SqlParameter("@Email", dto.Email),
-                    new SqlParameter("@Mobile", (object)dto.Mobile ?? DBNull.Value),
-                    new SqlParameter("@DepartmentId", dto.DepartmentId),
-                    new SqlParameter("@DesignationId", dto.DesignationId)
+                    return NotFound(new ApiResponse<string>(0, "Employee not found.", null));
+                }
+
+                var dto = new EmployeeDetailsDto
+                {
+                    UserId = employeeView.UserId,
+                    EmpCode = employeeView.EmpCode,
+                    FirstName = employeeView.FirstName,
+                    MiddleName = employeeView.MiddleName,
+                    LastName = employeeView.LastName,
+                    EmailID = employeeView.EmailID,
+                    Mobile = employeeView.Mobile,
+                    DateOfBirth = employeeView.DateofBirth,
+                    Gender = employeeView.Gender,
+                    Address = employeeView.Address,
+                    PhotoUrl = await _storageService.GetSecureFileUrlAsync(employeeView.PhotoUrl),
+                    DepartmentId = employeeView.DepartmentId,
+                    DesignationId = employeeView.DesignationId,
+                    Status = employeeView.Status,
+
+                    PAN = string.IsNullOrEmpty(employeeView.PAN) ? null : _encryptionService.Decrypt(employeeView.PAN),
+                    AadhaarCard = string.IsNullOrEmpty(employeeView.AadhaarCard) ? null : _encryptionService.Decrypt(employeeView.AadhaarCard),
+                    BankAccountNumber = string.IsNullOrEmpty(employeeView.BankAccountNumber) ? null : _encryptionService.Decrypt(employeeView.BankAccountNumber),
+
+                    ReportingManagerIds = string.IsNullOrEmpty(employeeView.ManagerIds)
+                        ? new List<int>()
+                        : employeeView.ManagerIds.Split(',').Select(int.Parse).ToList()
                 };
 
-                await _context.Database
-                    .ExecuteSqlRawAsync("EXEC sp_UpdateEmployeeDetails @EmployeeId, @FirstName, @LastName, @Email, @Mobile, @DepartmentId, @DesignationId", parameters);
-
-                return Ok(new { Message = "Employee details updated successfully." });
+                return Ok(new ApiResponse<EmployeeDetailsDto>(1, "Success", dto));
             }
-            catch (SqlException ex)
+            catch (Exception ex)
             {
-                return BadRequest(new { Message = ex.Message });
-            }
-            catch (Exception)
-            {
-                return StatusCode(500, "An internal server error occurred.");
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
             }
         }
 
-
-        [HttpGet("getAllEmployeeList")]
-        [HasPermission("employees.list.all")]
-        public async Task<IActionResult> EmployeeList()
+        [HttpDelete("deleteEmployee/{employeeId}")]
+        [HasPermission("employees.delete")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteEmployee(int employeeId)
         {
-            var res = await _context.vw_EmpList.ToListAsync();
-            return Ok(res);
-        }
-
-
-        [HttpGet("my-team")]
-        public async Task<IActionResult> GetMyTeam()
-        {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-
-            var userIdParam = new SqlParameter("@TopLevelUserId", userId);
-
-            var teamList = await _context.vw_EmpList
-                .FromSqlRaw("EXEC sp_GetEmployeeHierarchy @TopLevelUserId", userIdParam)
-                .ToListAsync();
-
-            return Ok(teamList);
-        }
-
-
-        [HttpGet("my-menu")]
-        public async Task<IActionResult> GetUserMenu()
-        {
-            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdString, out var userId))
+            try
             {
-                return Unauthorized();
+                var employee = await _context.EmpMaster.FirstOrDefaultAsync(e => e.UserId == employeeId);
+
+                if (employee == null)
+                {
+                    return NotFound(new ApiResponse<string>(0, "Employee not found.", null));
+                }
+
+                if (employee.Status == "I")
+                {
+                    return Ok(new ApiResponse<string>(1, "Employee is already inactive.", null));
+                }
+
+                employee.Status = "I";
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<string>(1, "Employee successfully deactivated.", null));
             }
-
-            var isSuperAdmin = await _context.Users
-                .Where(u => u.Id == userId)
-                .Select(u => u.IsSuperAdmin)
-                .FirstOrDefaultAsync();
-
-            var userPermissions = await _context.UserRoles
-                .Where(ur => ur.UserId == userId)
-                .SelectMany(ur => ur.Role.RolePermissions)
-                .Select(rp => rp.PermissionId)
-                .Distinct()
-                .ToListAsync();
-
-            var allMenuItems = await _context.MenuItems
-                .OrderBy(m => m.DisplayOrder)
-                .ToListAsync();
-
-            var accessibleMenu = allMenuItems.Where(item =>
-                    item.RequiredPermissionId == null ||
-                    isSuperAdmin ||
-                    userPermissions.Contains(item.RequiredPermissionId.Value)
-                ).ToList();
-
-
-            return Ok(accessibleMenu);
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
+            }
         }
 
     }
