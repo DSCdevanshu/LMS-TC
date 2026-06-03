@@ -39,6 +39,7 @@ namespace TCBackend.Dtos.Home
         public string? MiddleName { get; set; }
         public string LastName { get; set; }
         public string Email { get; set; }
+        public string? Gender { get; set; }
         public string? Mobile { get; set; }
         public int DepartmentId { get; set; }
         public int DesignationId { get; set; }
@@ -87,6 +88,19 @@ namespace TCBackend.Dtos.Home
         public int EmployeeId { get; set; }
         [Required]
         public int ManagerId { get; set; }
+    }
+    public class EmployeeGridDto
+    {
+        public int UserId { get; set; }
+        public string? EmpCode { get; set; }
+        public string? EmpName { get; set; }
+        public string? EmailID { get; set; }
+        public string? Mobile { get; set; }
+        public string? Status { get; set; }
+        public DateTime? HireDate { get; set; }
+        public string? DepartmentName { get; set; }
+        public string? DesignationName { get; set; }
+        public string? ManagerNames { get; set; }
     }
     public class EmployeeFilterDto
     {

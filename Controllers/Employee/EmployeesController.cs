@@ -169,6 +169,7 @@ namespace TCBackend.Controllers.Employee
                 employee.LastName = dto.LastName;
                 employee.EmailID = dto.Email;
                 employee.Mobile = dto.Mobile;
+                employee.Gender = dto.Gender;
                 employee.DepartmentId = dto.DepartmentId;
                 employee.DesignationId = dto.DesignationId;
                 employee.Address = dto.Address;
@@ -276,9 +277,45 @@ namespace TCBackend.Controllers.Employee
 
 
 
+        [HttpDelete("RemoveEmployeePhoto/{employeeId}")]
+        [HasPermission("employees.update")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> RemoveEmployeePhoto(int employeeId)
+        {
+            try
+            {
+                var employee = await _context.EmpMaster.FirstOrDefaultAsync(e => e.UserId == employeeId);
+
+                if (employee == null)
+                {
+                    return NotFound(new ApiResponse<string>(0, "Employee not found.", null));
+                }
+
+                if (string.IsNullOrEmpty(employee.PhotoUrl))
+                {
+                    return Ok(new ApiResponse<string>(1, "Employee does not have a photo.", null));
+                }
+
+                await _storageService.DeleteFileAsync(employee.PhotoUrl);
+
+                employee.PhotoUrl = null;
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<string>(1, "Photo removed successfully.", null));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
+            }
+        }
+
+
+
         [HttpPost("GetEmployeeList")]
         [HasPermission("employees.read.team")]
-        [ProducesResponseType(typeof(ApiResponse<IEnumerable<dynamic>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<IEnumerable<EmployeeGridDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetEmployeeList([FromBody] EmployeeFilterDto filter)
         {
             try
@@ -297,13 +334,13 @@ namespace TCBackend.Controllers.Employee
                 p.Add("@HireDateTo", filter.HireDateTo);
 
                 var connection = _context.Database.GetDbConnection();
-                var list = await connection.QueryAsync(
+                var list = await connection.QueryAsync<EmployeeGridDto>(
                     "sp_GetEmployeeGrid",
                     p,
                     commandType: CommandType.StoredProcedure
                 );
 
-                return Ok(new ApiResponse<IEnumerable<dynamic>>(1, "Success", list));
+                return Ok(new ApiResponse<IEnumerable<EmployeeGridDto>>(1, "Success", list));
             }
             catch (Exception ex)
             {

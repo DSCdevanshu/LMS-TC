@@ -79,7 +79,7 @@ namespace TCBackend.Controllers.Home
         [HttpGet("GetDropdownData")]
         [ProducesResponseType(typeof(ApiResponse<IEnumerable<GenericDropdownDto>>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> GetDropdownData([FromQuery] string flag)
+        public async Task<IActionResult> GetDropdownData([FromQuery] string flag, [FromQuery] string? id = null, [FromQuery] string? others = null)
         {
             if (string.IsNullOrEmpty(flag))
             {
@@ -93,6 +93,8 @@ namespace TCBackend.Controllers.Home
                 var p = new DynamicParameters();
                 p.Add("@Flag", flag);
                 p.Add("@LoginUserId", userId);
+                p.Add("@Id", id);
+                p.Add("@Others", others);
                 var connection = _context.Database.GetDbConnection();
                 var results = await connection.QueryAsync<GenericDropdownDto>(
                     "sp_GetDropdownData",
