@@ -17,12 +17,26 @@ namespace TCBackend.Controllers.Employee
     {
         private readonly TCDbContext _context;
         public DepartmentsController(TCDbContext context) { _context = context; }
+        
         [HttpGet]
         [HasPermission("departments.view")]
-        public async Task<ActionResult<ApiResponse<List<Department>>>> GetAll()
+        [ProducesResponseType(typeof(ApiResponse<List<DepartmentListDto>>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<ApiResponse<List<DepartmentListDto>>>> GetAll()
         {
-            var list = await _context.DepartmentMaster.ToListAsync();
-            return Ok(new ApiResponse<List<Department>>(1, "Success", list));
+            var list = await (from d in _context.DepartmentMaster
+                             join e in _context.EmpMaster on d.HOD equals e.UserId into hod
+                             from h in hod.DefaultIfEmpty()
+                             select new DepartmentListDto
+                             {
+                                 DepId = d.DepId,
+                                 DepCode = d.DepCode,
+                                 DepartmentName = d.DepartmentName,
+                                 HOD = d.HOD,
+                                 HODName = h == null ? null : (h.FirstName + " " + h.LastName).Trim(),
+                                 Status = d.Status,
+                                 TotalEmployees = _context.EmpMaster.Count(emp => emp.DepartmentId == d.DepId)
+                             }).ToListAsync();
+            return Ok(new ApiResponse<List<DepartmentListDto>>(1, "Success", list));
         }
 
         // CREATE
@@ -36,6 +50,11 @@ namespace TCBackend.Controllers.Employee
                 if (await _context.DepartmentMaster.AnyAsync(d => d.DepCode == dto.DepCode))
                 {
                     return BadRequest(new ApiResponse<object>(0, $"Department Code '{dto.DepCode}' already exists.", null));
+                }
+
+                if (await _context.DepartmentMaster.AnyAsync(d => d.DepartmentName == dto.DepartmentName))
+                {
+                    return BadRequest(new ApiResponse<object>(0, $"Department Name '{dto.DepartmentName}' already exists.", null));
                 }
 
                 var department = new Department
@@ -69,6 +88,16 @@ namespace TCBackend.Controllers.Employee
                 if (department == null)
                 {
                     return NotFound(new ApiResponse<object>(0, "Department not found.", null));
+                }
+
+                if (await _context.DepartmentMaster.AnyAsync(d => d.DepCode == dto.DepCode && d.DepId != id))
+                {
+                    return BadRequest(new ApiResponse<object>(0, $"Department Code '{dto.DepCode}' already exists.", null));
+                }
+
+                if (await _context.DepartmentMaster.AnyAsync(d => d.DepartmentName == dto.DepartmentName && d.DepId != id))
+                {
+                    return BadRequest(new ApiResponse<object>(0, $"Department Name '{dto.DepartmentName}' already exists.", null));
                 }
 
                 // Update fields

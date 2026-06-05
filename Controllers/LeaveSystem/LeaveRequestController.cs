@@ -36,9 +36,10 @@ namespace TCBackend.Controllers.LeaveSystem
             _storageService = storageService;
         }
         [HttpGet("test")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
         public async Task<IActionResult> test()
         {
-            return Ok("Test is working");
+            return Ok(new ApiResponse<string>(1, "Success", "Test is working"));
         }
 
         private async Task<IActionResult> changeProcess(int LeaveReqId, int processId,string? remarks="")
@@ -82,7 +83,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
         [HttpGet("getLeaveHistory/{leaveReqId}")]
         [HasPermission("leaves.view")]
-        [ProducesResponseType(typeof(List<LeaveProcessHistory>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<List<LeaveProcessHistory>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetLeaveHistory(int leaveReqId)
         {
             try
@@ -91,21 +92,17 @@ namespace TCBackend.Controllers.LeaveSystem
                     .FromSqlRaw("EXEC sp_GetLeaveProcessHistory @LeaveReqID={0}", leaveReqId)
                     .ToListAsync();
 
-                if (result == null || !result.Any())
-                {
-                    return Ok(new List<LeaveProcessHistory>());
-                }
-
-                return Ok(result);
+                return Ok(new ApiResponse<List<LeaveProcessHistory>>(1, "Success", result ?? new List<LeaveProcessHistory>()));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                return StatusCode(500, new ApiResponse<List<LeaveProcessHistory>>(0, $"Internal server error: {ex.Message}", null));
             }
         }
         [HttpGet("getLeaveRequestDetails/{leaveReqId}")]
         [HasPermission("leaves.view")]
-        [ProducesResponseType(typeof(LeaveDetailsResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<LeaveDetailsResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetLeaveRequestDetails(int leaveReqId)
         {
             var response = new LeaveDetailsResponseDto();
@@ -122,53 +119,37 @@ namespace TCBackend.Controllers.LeaveSystem
 
                     if (header == null)
                     {
-                        return NotFound("Leave Request not found.");
+                        return NotFound(new ApiResponse<string>(0, "Leave Request not found.", null));
                     }
 
                     var days = await multi.ReadAsync<LeaveRequestDayDto>();
                     response.Days = days.ToList();
 
                     header.PhotoUrl = await _storageService.GetSecureFileUrlAsync(header.PhotoUrl);
-                    //if (!string.IsNullOrEmpty(header.PhotoUrl))
-                    //{
-                    //    try
-                    //    {
-                    //        var relativePath = header.PhotoUrl.TrimStart('/', '\\');
-                    //        var fullPath = Path.Combine(_env.WebRootPath, relativePath);
-
-                    //        if (System.IO.File.Exists(fullPath))
-                    //        {
-                    //            header.Photo = await System.IO.File.ReadAllBytesAsync(fullPath);
-                    //        }
-                    //    }
-                    //    catch (Exception)
-                    //    {
-                    //        header.Photo = null;
-                    //    }
-                    //}
                     response.Header = header;
 
                 }
 
-                return Ok(response);
+                return Ok(new ApiResponse<LeaveDetailsResponseDto>(1, "Success", response));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
             }
         }
 
         [HttpPost("postLeaveReqSend")]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> LeaveReqSend(int LeaveReqId)
         {
             var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
 
             if (leave == null)
             {
-                return NotFound("Leave request not found.");
+                return NotFound(new ApiResponse<string>(0, "Leave request not found.", null));
             }
             return await changeProcess(LeaveReqId, 2);
-            // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
         }
 
         [HttpPost("updateLeaveStatus")]
@@ -261,25 +242,26 @@ namespace TCBackend.Controllers.LeaveSystem
                     case 1:
                         if (isApplicant)
                         {
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 2, ButtonName = "Send Request", ColorTheme = "blue" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 1, ButtonName = "Edit Request", ColorTheme = "#94a3b8" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 2, ButtonName = "Send Request", ColorTheme = "#3b82f6" });
                         }
                         break;
 
                     case 2:
                         if (isManager || isAdmin)
                         {
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 3, ButtonName = "Approve", ColorTheme = "green" });
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 4, ButtonName = "Reject", ColorTheme = "red" });
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 5, ButtonName = "Hold", ColorTheme = "yellow" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 3, ButtonName = "Approve", ColorTheme = "#22c55e" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 4, ButtonName = "Reject", ColorTheme = "#ef4444" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 5, ButtonName = "Hold", ColorTheme = "#f59e0b" });
                         }
                         break;
 
                     case 3:
                         if (isHR)
                         {
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 6, ButtonName = "Final Approve", ColorTheme = "green" });
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 7, ButtonName = "Reject", ColorTheme = "red" });
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 8, ButtonName = "Hold", ColorTheme = "yellow" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 6, ButtonName = "Final Approve", ColorTheme = "#22c55e" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 7, ButtonName = "Reject", ColorTheme = "#ef4444" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 8, ButtonName = "Hold", ColorTheme = "#f59e0b" });
                         }
                         break;
 
@@ -287,7 +269,7 @@ namespace TCBackend.Controllers.LeaveSystem
                     case 8: // HOLD BY HR
                         if (isApplicant)
                         {
-                            buttons.Add(new LeaveActionButtonDto { ProcessId = 1, ButtonName = "Modify (Move to Draft)", ColorTheme = "gray" });
+                            buttons.Add(new LeaveActionButtonDto { ProcessId = 1, ButtonName = "Modify (Move to Draft)", ColorTheme = "#94a3b8" });
                         }
                         break;
 
@@ -307,134 +289,21 @@ namespace TCBackend.Controllers.LeaveSystem
         }
 
 
-        //[HttpGet("canApprove/{leaveReqId}")]
-        //[Authorize]
-        //public async Task<ActionResult<ApiResponse<bool>>> CanApprove(int leaveReqId)
-        //{
-        //    try
-        //    {
-        //        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-
-        //        if (User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole("HR"))
-        //        {
-        //            return Ok(new ApiResponse<bool>(1, "Admin/HR Override", true));
-        //        }
-
-        //        var applicantId = await _dbContext.LeaveRequestMaster
-        //            .Where(l => l.LeaveReqID == leaveReqId)
-        //            .Select(l => l.UserId)
-        //            .FirstOrDefaultAsync();
-
-        //        if (applicantId == 0)
-        //        {
-        //            return NotFound(new ApiResponse<bool>(0, "Leave Request not found", false));
-        //        }
-
-        //        if (applicantId == currentUserId)
-        //        {
-        //            return Ok(new ApiResponse<bool>(1, "Cannot approve own leave", false));
-        //        }
-
-        //        bool isManager = await _dbContext.Database
-        //            .SqlQueryRaw<bool>("SELECT CAST(dbo.fn_IsManagerInHierarchy({0}, {1}) AS BIT) AS [Value]", applicantId, currentUserId)
-        //            .FirstOrDefaultAsync();
-
-        //        return Ok(new ApiResponse<bool>(1, "Success", isManager));
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(500, new ApiResponse<bool>(0, $"Error: {ex.Message}", false));
-        //    }
-        //}
-
-        //[HttpPost("postLeaveApprovedByRM")]
-        //public async Task<IActionResult> LeaveApprovedByRM(int LeaveReqId)
-        //{
-        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-        //    if (leave == null)
-        //    {
-        //        return NotFound("Leave request not found.");
-        //    }
-        //    return await changeProcess(LeaveReqId, 3);
-        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        //}
-
-
-        //[HttpPost("postLeaveRejectedByRM")]
-        //public async Task<IActionResult> LeaveRejectedByRM(int LeaveReqId)
-        //{
-        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-        //    if (leave == null)
-        //    {
-        //        return NotFound("Leave request not found.");
-        //    }
-        //    return await changeProcess(LeaveReqId, 4);
-        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        //}
-
-
-        //[HttpPost("postLeaveHoldByRM")]
-        //public async Task<IActionResult> LeaveHoldByRM(int LeaveReqId)
-        //{
-        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-        //    if (leave == null)
-        //    {
-        //        return NotFound("Leave request not found.");
-        //    }
-        //    return await changeProcess(LeaveReqId, 5);
-        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        //}
-
-
-        //[HttpPost("postLeaveApprovedByHR")]
-        //public async Task<IActionResult> LeaveApprovedByHR(int LeaveReqId)
-        //{
-        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-        //    if (leave == null)
-        //    {
-        //        return NotFound("Leave request not found.");
-        //    }
-        //    return await changeProcess(LeaveReqId, 6);
-        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        //}
-
-
-
-        //[HttpPost("postLeaveRejectedByHR")]
-        //public async Task<IActionResult> LeaveRejectedByHR(int LeaveReqId)
-        //{
-        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-        //    if (leave == null)
-        //    {
-        //        return NotFound("Leave request not found.");
-        //    }
-        //    return await changeProcess(LeaveReqId, 7);
-        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        //}
-
-
-
-        //[HttpPost("postLeaveHoldByHR")]
-        //public async Task<IActionResult> LeaveHoldByHR(int LeaveReqId)
-        //{
-        //    var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
-
-        //    if (leave == null)
-        //    {
-        //        return NotFound("Leave request not found.");
-        //    }
-        //    return await changeProcess(LeaveReqId, 8);
-        //    // await _emailService.SendEmailAsync("devanshu.singh@colorplast.in", "devanshu.singh@colorplast.in", "Leave Request", $"Please approve my leave.");
-        //}
-
-
-
-
+        [HttpGet("canCreateForOthers")]
+        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> CanCreateForOthers()
+        {
+            try
+            {
+                int loginUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+                bool hasPermission = await _permissionService.HasPermissionAsync(loginUserId, "leaves.create.all");
+                return Ok(new ApiResponse<int>(1, "Success", hasPermission ? 1 : 0));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<int>(0, $"Internal Error: {ex.Message}", 0));
+            }
+        }
 
         [HttpPost("postLeaveReqEntry")]
         [HasPermission("leaves.create")]
@@ -465,14 +334,14 @@ namespace TCBackend.Controllers.LeaveSystem
 
                 if (result == null)
                 {
-                    return StatusCode(500, "An unexpected error occurred.");
+                    return StatusCode(500, new ApiResponse<int>(0, "An unexpected error occurred.", 0));
                 }
 
-                return Ok(new { status = result.ErrorNumber, message = result.ErrorMessage, leaveRequestId = result.LeaveRequestID });
+                return Ok(new ApiResponse<object>(result.ErrorNumber ?? 0, result.ErrorMessage, new { leaveRequestId = result.LeaveRequestID }));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"An internal server error occurred: {ex.Message}");
+                return StatusCode(500, new ApiResponse<int>(0, $"An internal server error occurred: {ex.Message}", 0));
             }
         }
 
@@ -573,38 +442,45 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
         [HttpGet("my-balance")]
-        [ProducesResponseType(typeof(LeaveBalanceDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<LeaveBalanceDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyLeaveBalance()
         {
-            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdString, out var userId))
+            try
             {
-                return Unauthorized("User ID not found in token.");
+                var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(userIdString, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<string>(0, "User ID not found in token.", null));
+                }
+
+                var leaveBalance = await _dbContext.LeaveBalance
+                    .FirstOrDefaultAsync(lb => lb.UserId == userId);
+
+                if (leaveBalance == null)
+                {
+                    return NotFound(new ApiResponse<string>(0, "Leave balance not found for this user.", null));
+                }
+
+                var leaveBalanceDto = new LeaveBalanceDto
+                {
+                    UserId = leaveBalance.UserId,
+                    PaidLeave = leaveBalance.PaidLeave,
+                    FreeLeave = leaveBalance.FreeLeave,
+                    ShortLeave = leaveBalance.ShortLeave
+                };
+
+                return Ok(new ApiResponse<LeaveBalanceDto>(1, "Success", leaveBalanceDto));
             }
-
-            var leaveBalance = await _dbContext.LeaveBalance
-                .FirstOrDefaultAsync(lb => lb.UserId == userId);
-
-            if (leaveBalance == null)
+            catch (Exception ex)
             {
-                return NotFound("Leave balance not found for this user.");
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Error: {ex.Message}", null));
             }
-
-            var leaveBalanceDto = new LeaveBalanceDto
-            {
-                UserId = leaveBalance.UserId,
-                PaidLeave = leaveBalance.PaidLeave,
-                FreeLeave = leaveBalance.FreeLeave,
-                ShortLeave = leaveBalance.ShortLeave
-            };
-
-            return Ok(leaveBalanceDto);
         }
 
 
         [HttpPost("getLeaveUserList")]
         [HasPermission("leaves.view")]
-        [ProducesResponseType(typeof(List<VW_LeaveReqGrid>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<List<VW_LeaveReqGrid>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> LeaveUserList([FromBody] LeaveReqGridParams? gridParams)
         {
             gridParams ??= new LeaveReqGridParams();
@@ -630,11 +506,11 @@ namespace TCBackend.Controllers.LeaveSystem
                     .FromSqlRaw("EXEC sp_LeaveReqGrid @DateFrom, @DateTo, @LeaveTypeid, @LeaveUserId, @depId, @ProcessID, @LoginUserId, @ViewAll", parameters)
                     .ToListAsync();
 
-                return Ok(model);
+                return Ok(new ApiResponse<List<VW_LeaveReqGrid>>(1, "Success", model));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
             }
         }
 
@@ -658,24 +534,38 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
         [HttpGet("getLeaveType")]
+        [ProducesResponseType(typeof(ApiResponse<List<LeaveTypeMaster>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> LeaveType()
         {
-            var result = await _dbContext.LeaveTypeMaster.ToListAsync();
-            return Ok(result);
+            try
+            {
+                var result = await _dbContext.LeaveTypeMaster.ToListAsync();
+                return Ok(new ApiResponse<List<LeaveTypeMaster>>(1, "Success", result));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Error: {ex.Message}", null));
+            }
         }
 
         [HttpGet("getUserCalendarData")]
-        [ProducesResponseType(typeof(List<UserCalendarDataDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<List<UserCalendarDataDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> CalendarData(int month,int year)
         {
-
-            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdString, out var userId))
+            try
             {
-                return Unauthorized("User ID not found in token.");
+                var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(userIdString, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<string>(0, "User ID not found in token.", null));
+                }
+                var model = await _dbContext.sp_GetUserCalendarData.FromSqlRaw("sp_GetUserCalendarData @userid={0},@month={1},@year={2}", userId, month, year).ToListAsync();
+                return Ok(new ApiResponse<List<UserCalendarDataDto>>(1, "Success", model));
             }
-            var model = await _dbContext.sp_GetUserCalendarData.FromSqlRaw("sp_GetUserCalendarData @userid={0},@month={1},@year={2}", userId, month, year).ToListAsync();
-            return Ok(model);
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Error: {ex.Message}", null));
+            }
         }
 
 

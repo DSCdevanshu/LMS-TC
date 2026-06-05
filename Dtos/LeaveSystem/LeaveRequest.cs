@@ -171,11 +171,13 @@ namespace TCBackend.Dtos.LeaveSystem
     public class LeaveRequestHeaderDto
     {
         public int LeaveReqID { get; set; }
+        public int? UserId { get; set; }
         public string? EmpCode { get; set; }
         public string? EmployeeName { get; set; }
         public string? DepartmentName { get; set; }
         public string? Designation { get; set; }
         public string? PhotoUrl { get; set; }
+        public int? LeaveTypeId { get; set; }
         public string? LeaveType { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }

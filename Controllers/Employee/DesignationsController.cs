@@ -17,59 +17,28 @@ namespace TCBackend.Controllers.Employee
         private readonly TCDbContext _context;
         public DesignationsController(TCDbContext context) { _context = context; }
 
-        //[HttpGet]
-        //[HasPermission("designations.read")]
-        //public async Task<IActionResult> Get()
-        //{
-        //    var designations = await _context.DesignationMaster.FromSqlRaw("EXEC sp_GetDesignations").ToListAsync();
-        //    return Ok(designations);
-        //}
-
-        //[HttpPost]
-        //[HasPermission("designations.create")]
-        //public async Task<IActionResult> Create([FromBody] DesignationDto dto)
-        //{
-        //    await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_CreateDesignation {dto.Title}");
-        //    return Ok(new { Message = "Designation created." });
-        //}
-
-        //[HttpPut("{id}")]
-        //[HasPermission("designations.update")]
-        //public async Task<IActionResult> Update(int id, [FromBody] DesignationDto dto)
-        //{
-        //    await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_UpdateDesignation {id}, {dto.Title}");
-        //    return Ok(new { Message = "Designation updated." });
-        //}
-
-        //[HttpDelete("{id}")]
-        //[HasPermission("designations.delete")]
-        //public async Task<IActionResult> Delete(int id)
-        //{
-        //    await _context.Database.ExecuteSqlInterpolatedAsync($"EXEC sp_DeleteDesignation {id}");
-        //    return Ok(new { Message = "Designation deleted." });
-        //}
-
-
-
-
-
-
         [HttpGet]
         [HasPermission("designations.read")]
-        [ProducesResponseType(typeof(ApiResponse<List<Designation>>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<ApiResponse<List<Designation>>>> Get()
+        [ProducesResponseType(typeof(ApiResponse<List<DesignationListDto>>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<ApiResponse<List<DesignationListDto>>>> Get()
         {
             try
             {
                 var list = await _context.DesignationMaster
-                    .OrderBy(d => d.Title) // Optional: Sort alphabetically
+                    .OrderBy(d => d.Title)
+                    .Select(d => new DesignationListDto
+                    {
+                        DesignationId = d.DesignationId,
+                        Title = d.Title,
+                        TotalEmployees = _context.EmpMaster.Count(emp => emp.DesignationId == d.DesignationId)
+                    })
                     .ToListAsync();
 
-                return Ok(new ApiResponse<List<Designation>>(1, "Success", list));
+                return Ok(new ApiResponse<List<DesignationListDto>>(1, "Success", list));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<List<Designation>>(0, $"Error: {ex.Message}", null));
+                return StatusCode(500, new ApiResponse<List<DesignationListDto>>(0, $"Error: {ex.Message}", null));
             }
         }
 
