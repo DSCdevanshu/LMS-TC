@@ -19,7 +19,7 @@ namespace TCBackend.Controllers.AuthSec
         private readonly TCDbContext _context;
         public RolesController(TCDbContext context) { _context = context; }
 
-        [HttpGet]
+        [HttpGet("GetAll")]
         [HasPermission("roles.manage")]
         [ProducesResponseType(typeof(ApiResponse<IEnumerable<RoleResponseDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetRoles()
@@ -44,7 +44,38 @@ namespace TCBackend.Controllers.AuthSec
             }
         }
 
-        [HttpPost]
+        [HttpGet("GetById/{roleId}")]
+        [HasPermission("roles.manage")]
+        [ProducesResponseType(typeof(ApiResponse<RoleResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetRoleById(int roleId)
+        {
+            try
+            {
+                var role = await _context.Roles
+                    .Where(r => r.Id == roleId)
+                    .Select(r => new RoleResponseDto
+                    {
+                        Id = r.Id,
+                        Name = r.Name,
+                        PermissionIds = r.RolePermissions.Select(rp => rp.PermissionId).ToList()
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (role == null)
+                {
+                    return NotFound(new ApiResponse<string>(0, "Role not found.", null));
+                }
+
+                return Ok(new ApiResponse<RoleResponseDto>(1, "Success", role));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
+            }
+        }
+
+        [HttpPost("Create")]
         [HasPermission("roles.manage")]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status400BadRequest)]
@@ -92,7 +123,7 @@ namespace TCBackend.Controllers.AuthSec
             }
         }
 
-        [HttpPut("{roleId}")]
+        [HttpPut("Update/{roleId}")]
         [HasPermission("roles.manage")]
         [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
@@ -142,6 +173,51 @@ namespace TCBackend.Controllers.AuthSec
                 await transaction.CommitAsync();
 
                 return Ok(new ApiResponse<string>(1, "Role updated successfully.", null));
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new ApiResponse<string>(0, $"Internal Server Error: {ex.Message}", null));
+            }
+        }
+
+        [HttpDelete("Delete/{roleId}")]
+        [HasPermission("roles.manage")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteRole(int roleId)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var role = await _context.Roles.FirstOrDefaultAsync(r => r.Id == roleId);
+
+                if (role == null)
+                {
+                    return NotFound(new ApiResponse<string>(0, "Role not found.", null));
+                }
+
+                if (role.Name == "Employee" || role.Name == "SuperAdmin")
+                {
+                    return BadRequest(new ApiResponse<string>(0, "Cannot delete core system roles.", null));
+                }
+
+                bool isAssigned = await _context.UserRoles.AnyAsync(ur => ur.RoleId == roleId);
+                if (isAssigned)
+                {
+                    return BadRequest(new ApiResponse<string>(0, "Cannot delete this role because it is assigned to users.", null));
+                }
+
+                var rolePermissions = await _context.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync();
+                _context.RolePermissions.RemoveRange(rolePermissions);
+
+                _context.Roles.Remove(role);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new ApiResponse<string>(1, "Role deleted successfully.", null));
             }
             catch (Exception ex)
             {

@@ -5,6 +5,7 @@ using TCBackend.Dtos.Management;
 using TCBackend.Dtos.Wrappers;
 using TCBackend.Model.Employee;
 using TCBackend.Model.LoginSecurity;
+using TCBackend.Model.Masters;
 
 namespace TCBackend.Data
 {
@@ -96,6 +97,8 @@ namespace TCBackend.Data
         public DbSet<LeaveTypeMaster> LeaveTypeMaster { get; set; }
         public DbSet<LeaveBalanceDto> LeaveBalance { get; set; }
         public DbSet<PageMaster> PageMaster { get; set; }
+        public DbSet<LocationMaster> LocationMaster { get; set; }
+        public DbSet<CompanyMaster> CompanyMaster { get; set; }
         public DbSet<SpLeaveRequestResult> SpLeaveRequestResult { get; set; }
         public DbSet<SpLeaveRequestResultV2> SpLeaveRequestResultsV2 { get; set; }
 
