@@ -21,7 +21,7 @@ namespace TCBackend.Controllers.Employee
         }
 
         [HttpPost("assign-manager")]
-        [HasPermission("employees.manage.hierarchy")]
+        [HasPermission("employees.update")]
         public async Task<IActionResult> AssignManager([FromBody] ManagerAssignmentDto dto)
         {
             try
@@ -42,7 +42,7 @@ namespace TCBackend.Controllers.Employee
         }
 
         [HttpDelete("remove-manager")]
-        [HasPermission("employees.manage.hierarchy")]
+        [HasPermission("employees.update")]
         public async Task<IActionResult> RemoveManager([FromBody] ManagerAssignmentDto dto)
         {
             try

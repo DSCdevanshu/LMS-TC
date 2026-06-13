@@ -17,7 +17,7 @@ namespace TCBackend.Controllers.Employee
 {
     [Route("api/[controller]")]
     [ApiController]
-    //[Authorize]
+    [Authorize]
     public class EmpAuthorityController : ControllerBase
     {
         private readonly TCDbContext _context;

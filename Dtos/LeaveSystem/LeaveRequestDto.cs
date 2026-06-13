@@ -31,9 +31,17 @@ namespace TCBackend.Dtos.LeaveSystem
         [Key]
         public int Id { get; set; }
         public int UserId { get; set; }
-        public decimal PaidLeave { get; set; }
-        public decimal FreeLeave { get; set; }
-        public decimal ShortLeave { get; set; }
+        public int LeaveTypeId { get; set; }
+        public decimal Balance { get; set; }
+        public bool IsUnlimited { get; set; }
+    }
+
+    public class UserLeaveBalanceDto
+    {
+        public int LeaveTypeId { get; set; }
+        public string? LeaveType { get; set; }
+        public decimal Balance { get; set; }
+        public bool IsUnlimited { get; set; }
     }
 
 }

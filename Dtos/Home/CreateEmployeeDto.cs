@@ -11,7 +11,6 @@ namespace TCBackend.Dtos.Home
     {
         [Required] public string Username { get; set; }
         [Required][MinLength(8)] public string Password { get; set; }
-        [Required] public string EmpCode { get; set; }
         [Required] public string FirstName { get; set; }
         public string? MiddleName { get; set; }
         [Required] public string LastName { get; set; }
@@ -26,6 +25,9 @@ namespace TCBackend.Dtos.Home
         [Required] public DateTime HireDate { get; set; }
         [Required] public int DesignationId { get; set; }
         [Required] public int DepartmentId { get; set; }
+        public int? CompanyId { get; set; }
+        public int? LocationId { get; set; }
+        public bool CanWorkFromHome { get; set; }
         public List<int>? ReportingManagerIds { get; set; }
         public string? PAN { get; set; }
         public string? AadhaarCard { get; set; }
@@ -38,11 +40,18 @@ namespace TCBackend.Dtos.Home
         public string FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string LastName { get; set; }
+        public string? FathersName { get; set; }
+        public string? MothersName { get; set; }
+        public DateTime DateOfBirth { get; set; }
+        public DateTime? HireDate { get; set; }
         public string Email { get; set; }
         public string? Gender { get; set; }
         public string? Mobile { get; set; }
         public int DepartmentId { get; set; }
         public int DesignationId { get; set; }
+        public int? CompanyId { get; set; }
+        public int? LocationId { get; set; }
+        public bool? CanWorkFromHome { get; set; }
         public string? Address { get; set; }
         public string? PAN { get; set; }
         public string? AadhaarCard { get; set; }
@@ -68,19 +77,30 @@ namespace TCBackend.Dtos.Home
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
+        public string? FathersName { get; set; }
+        public string? MothersName { get; set; }
         public string? EmailID { get; set; }
         public string? Mobile { get; set; }
         public DateTime DateOfBirth { get; set; }
+        public DateTime? HireDate { get; set; }
         public string? Gender { get; set; }
         public string? Address { get; set; }
         public string? PhotoUrl { get; set; }
         public int DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
         public int DesignationId { get; set; }
+        public string? DesignationName { get; set; }
+        public int? CompanyId { get; set; }
+        public string? CompanyName { get; set; }
+        public int? LocationId { get; set; }
+        public string? LocationName { get; set; }
+        public bool CanWorkFromHome { get; set; }
         public string? PAN { get; set; }
         public string? AadhaarCard { get; set; }
         public string? BankAccountNumber { get; set; }
         public string? Status { get; set; }
         public List<int> ReportingManagerIds { get; set; } = new List<int>();
+        public string? ManagerNames { get; set; }
     }
     public class ManagerAssignmentDto
     {
@@ -120,9 +140,12 @@ namespace TCBackend.Dtos.Home
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
         public string? FullName { get; set; }
+        public string? FathersName { get; set; }
+        public string? MothersName { get; set; }
         public string? EmailID { get; set; }
         public string? Mobile { get; set; }
         public DateTime DateofBirth { get; set; }
+        public DateTime? HireDate { get; set; }
         public string? Gender { get; set; }
         public string? Address { get; set; }
         public string? PhotoUrl { get; set; }
@@ -131,6 +154,11 @@ namespace TCBackend.Dtos.Home
         public string? DepartmentName { get; set; }
         public int DesignationId { get; set; }
         public string? DesignationTitle { get; set; }
+        public int? CompanyId { get; set; }
+        public string? CompanyName { get; set; }
+        public int? LocationId { get; set; }
+        public string? LocationName { get; set; }
+        public bool CanWorkFromHome { get; set; }
         public string? PAN { get; set; }
         public string? AadhaarCard { get; set; }
         public string? BankAccountNumber { get; set; }

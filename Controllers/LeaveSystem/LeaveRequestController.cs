@@ -42,36 +42,30 @@ namespace TCBackend.Controllers.LeaveSystem
             return Ok(new ApiResponse<string>(1, "Success", "Test is working"));
         }
 
-        private async Task<IActionResult> changeProcess(int LeaveReqId, int processId,string? remarks="")
+
+        private async Task<IActionResult> changeProcess(int LeaveReqId, int processId, string? remarks = "")
         {
             try
             {
-                var leave = await _dbContext.LeaveRequestMaster.Where(id => id.LeaveReqID == LeaveReqId).FirstOrDefaultAsync();
                 var loginUsr = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
-                if (leave == null)
+                var results = await _dbContext.Database
+                    .SqlQueryRaw<ChangeProcessResult>(
+                        "EXEC dbo.sp_ChangeLeaveProcess @LeaveReqId={0}, @ProcessId={1}, @LoginUsr={2}, @Remarks={3}",
+                        LeaveReqId, processId, loginUsr, remarks ?? (object)DBNull.Value)
+                    .ToListAsync();
+
+                var result = results.FirstOrDefault();
+
+                if (result is null || result.Status == 0)
                 {
-                    return NotFound("Leave request not found.");
+                    var msg = result?.Message ?? "Unknown error";
+                    return msg.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                        ? NotFound(new ApiResponse<int>(0, msg, 0))
+                        : StatusCode(500, new ApiResponse<int>(0, msg, 0));
                 }
-                var record = new LeaveProcessItem
-                {
-                    TableID = 3,
-                    ItemID = LeaveReqId,
-                    ProcessID = processId,
-                    ProcessBy = loginUsr,
-                    ProcessDate = DateTime.Now,
-                    Status = "A",
-                    CreatedBy = loginUsr,
-                    CreatedOn = DateTime.Now,
-                    ReasonRemarks = remarks
 
-                };
-                await _dbContext.LeaveProcessItem.AddAsync(record);
-                leave.ProcessId = processId;
-                _dbContext.LeaveRequestMaster.Update(leave);
-                await _dbContext.SaveChangesAsync();
-
-                return Ok(new ApiResponse<int>(1, "Success", LeaveReqId));
+                return Ok(new ApiResponse<int>(1, "Success", result.LeaveReqID));
             }
             catch (Exception ex)
             {
@@ -79,10 +73,10 @@ namespace TCBackend.Controllers.LeaveSystem
             }
         }
 
-        
+
 
         [HttpGet("getLeaveHistory/{leaveReqId}")]
-        [HasPermission("leaves.view")]
+        [HasPermission("leaves.read.own")]
         [ProducesResponseType(typeof(ApiResponse<List<LeaveProcessHistory>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetLeaveHistory(int leaveReqId)
         {
@@ -100,7 +94,7 @@ namespace TCBackend.Controllers.LeaveSystem
             }
         }
         [HttpGet("getLeaveRequestDetails/{leaveReqId}")]
-        [HasPermission("leaves.view")]
+        [HasPermission("leaves.read.own")]
         [ProducesResponseType(typeof(ApiResponse<LeaveDetailsResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetLeaveRequestDetails(int leaveReqId)
@@ -139,6 +133,7 @@ namespace TCBackend.Controllers.LeaveSystem
         }
 
         [HttpPost("postLeaveReqSend")]
+        [HasPermission("leaves.create")]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> LeaveReqSend(int LeaveReqId)
@@ -153,7 +148,7 @@ namespace TCBackend.Controllers.LeaveSystem
         }
 
         [HttpPost("updateLeaveStatus")]
-        [HasPermission("leaves.approve")]
+        [HasPermission("leaves.approve.team")]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status500InternalServerError)]
@@ -201,6 +196,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
         [HttpGet("getAvailableActions/{leaveReqId}")]
+        [HasPermission("leaves.read.own")]
         [ProducesResponseType(typeof(ApiResponse<List<LeaveActionButtonDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAvailableActions(int leaveReqId)
         {
@@ -442,7 +438,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
         [HttpGet("my-balance")]
-        [ProducesResponseType(typeof(ApiResponse<LeaveBalanceDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<List<UserLeaveBalanceDto>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyLeaveBalance()
         {
             try
@@ -453,23 +449,24 @@ namespace TCBackend.Controllers.LeaveSystem
                     return Unauthorized(new ApiResponse<string>(0, "User ID not found in token.", null));
                 }
 
-                var leaveBalance = await _dbContext.LeaveBalance
-                    .FirstOrDefaultAsync(lb => lb.UserId == userId);
+                var leaveBalances = await (from lb in _dbContext.LeaveBalance
+                                           join lt in _dbContext.LeaveTypeMaster on lb.LeaveTypeId equals lt.LeaveTypeId
+                                           where lb.UserId == userId
+                                           select new UserLeaveBalanceDto
+                                           {
+                                               LeaveTypeId = lb.LeaveTypeId,
+                                               LeaveType = lt.LeaveType,
+                                               Balance = lb.Balance,
+                                               IsUnlimited = lb.IsUnlimited
+                                           })
+                                           .ToListAsync();
 
-                if (leaveBalance == null)
+                if (leaveBalances.Count == 0)
                 {
                     return NotFound(new ApiResponse<string>(0, "Leave balance not found for this user.", null));
                 }
 
-                var leaveBalanceDto = new LeaveBalanceDto
-                {
-                    UserId = leaveBalance.UserId,
-                    PaidLeave = leaveBalance.PaidLeave,
-                    FreeLeave = leaveBalance.FreeLeave,
-                    ShortLeave = leaveBalance.ShortLeave
-                };
-
-                return Ok(new ApiResponse<LeaveBalanceDto>(1, "Success", leaveBalanceDto));
+                return Ok(new ApiResponse<List<UserLeaveBalanceDto>>(1, "Success", leaveBalances));
             }
             catch (Exception ex)
             {
@@ -479,7 +476,7 @@ namespace TCBackend.Controllers.LeaveSystem
 
 
         [HttpPost("getLeaveUserList")]
-        [HasPermission("leaves.view")]
+        [HasPermission("leaves.read.own")]
         [ProducesResponseType(typeof(ApiResponse<List<VW_LeaveReqGrid>>), StatusCodes.Status200OK)]
         public async Task<IActionResult> LeaveUserList([FromBody] LeaveReqGridParams? gridParams)
         {
@@ -488,7 +485,7 @@ namespace TCBackend.Controllers.LeaveSystem
             try
             {
                 var loginUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-                bool hasViewAllPermission = await _permissionService.HasPermissionAsync(loginUserId, "leaves.view_all");
+                bool hasViewAllPermission = await _permissionService.HasPermissionAsync(loginUserId, "leaves.read.all");
 
                 var parameters = new[]
                 {

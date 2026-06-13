@@ -19,7 +19,7 @@ namespace TCBackend.Controllers.Employee
         public DepartmentsController(TCDbContext context) { _context = context; }
         
         [HttpGet]
-        [HasPermission("departments.view")]
+        [HasPermission("masters.departments.manage")]
         [ProducesResponseType(typeof(ApiResponse<List<DepartmentListDto>>), StatusCodes.Status200OK)]
         public async Task<ActionResult<ApiResponse<List<DepartmentListDto>>>> GetAll()
         {
@@ -41,7 +41,7 @@ namespace TCBackend.Controllers.Employee
 
         // CREATE
         [HttpPost]
-        [HasPermission("departments.create")]
+        [HasPermission("masters.departments.manage")]
         public async Task<ActionResult<ApiResponse<object>>> Create([FromBody] DepartmentDto dto)
         {
             try
@@ -78,7 +78,7 @@ namespace TCBackend.Controllers.Employee
 
         // UPDATE
         [HttpPut("{id}")]
-        [HasPermission("departments.update")]
+        [HasPermission("masters.departments.manage")]
         public async Task<ActionResult<ApiResponse<object>>> Update(int id, [FromBody] DepartmentDto dto)
         {
             try
@@ -117,7 +117,7 @@ namespace TCBackend.Controllers.Employee
         }
 
         [HttpDelete("{id}")]
-        [HasPermission("departments.delete")]
+        [HasPermission("masters.departments.manage")]
         public async Task<ActionResult<ApiResponse<object>>> Delete(int id)
         {
             try

@@ -31,6 +31,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IStorageService, StorageService>();
+builder.Services.AddScoped<IDataTableService, DataTableService>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();

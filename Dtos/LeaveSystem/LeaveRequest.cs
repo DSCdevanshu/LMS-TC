@@ -137,6 +137,12 @@ namespace TCBackend.Dtos.LeaveSystem
         public int? ProcessID { get; set; }
     }
 
+    public class ChangeProcessResult
+    {
+        public int Status { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int LeaveReqID { get; set; }
+    }
     public class LeaveProcessHistory
     {
         public DateTime? ProcessDate { get; set; }

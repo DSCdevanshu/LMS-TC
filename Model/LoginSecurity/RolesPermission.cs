@@ -21,8 +21,8 @@ namespace TCBackend.Model.LoginSecurity
         public string Name { get; set; }
 
         // Navigation properties
-        public ICollection<UserRole> UserRoles { get; set; }
-        public ICollection<RolePermission> RolePermissions { get; set; }
+        public ICollection<UserRole>? UserRoles { get; set; }
+        public ICollection<RolePermission>? RolePermissions { get; set; }
     }
     public class Permission
     {

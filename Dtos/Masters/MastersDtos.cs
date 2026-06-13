@@ -38,4 +38,30 @@ namespace TCBackend.Dtos.Masters
         public string? CompanyCode { get; set; }
         public int TotalEmployees { get; set; }
     }
+
+    // --- Holiday ---
+    public class HolidayDto
+    {
+        [Required(ErrorMessage = "Holiday Date is required.")]
+        public DateTime HolidayDate { get; set; }
+        [Required(ErrorMessage = "Holiday Name is required.")]
+        public string HolidayName { get; set; }
+        [Required(ErrorMessage = "Company is required.")]
+        public int CompanyId { get; set; }
+        [Required(ErrorMessage = "Location is required.")]
+        public int LocationId { get; set; }
+        public bool IsRestricted { get; set; }
+    }
+
+    public class HolidayListDto
+    {
+        public int HolidayId { get; set; }
+        public DateTime HolidayDate { get; set; }
+        public string? HolidayName { get; set; }
+        public int CompanyId { get; set; }
+        public string? CompanyName { get; set; }
+        public int LocationId { get; set; }
+        public string? LocationName { get; set; }
+        public bool IsRestricted { get; set; }
+    }
 }

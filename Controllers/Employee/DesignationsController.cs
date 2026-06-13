@@ -18,7 +18,7 @@ namespace TCBackend.Controllers.Employee
         public DesignationsController(TCDbContext context) { _context = context; }
 
         [HttpGet]
-        [HasPermission("designations.read")]
+        [HasPermission("masters.designations.manage")]
         [ProducesResponseType(typeof(ApiResponse<List<DesignationListDto>>), StatusCodes.Status200OK)]
         public async Task<ActionResult<ApiResponse<List<DesignationListDto>>>> Get()
         {
@@ -43,7 +43,7 @@ namespace TCBackend.Controllers.Employee
         }
 
         [HttpPost]
-        [HasPermission("designations.create")]
+        [HasPermission("masters.designations.manage")]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
         public async Task<ActionResult<ApiResponse<object>>> Create([FromBody] DesignationDto dto)
         {
@@ -72,7 +72,7 @@ namespace TCBackend.Controllers.Employee
 
         // UPDATE
         [HttpPut("{id}")]
-        [HasPermission("designations.update")]
+        [HasPermission("masters.designations.manage")]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
         public async Task<ActionResult<ApiResponse<object>>> Update(int id, [FromBody] DesignationDto dto)
         {
@@ -105,7 +105,7 @@ namespace TCBackend.Controllers.Employee
         }
 
         [HttpDelete("{id}")]
-        [HasPermission("designations.delete")]
+        [HasPermission("masters.designations.manage")]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
         public async Task<ActionResult<ApiResponse<object>>> Delete(int id)
         {

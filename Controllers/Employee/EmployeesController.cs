@@ -39,7 +39,7 @@ namespace TCBackend.Controllers.Employee
 
         [HttpPost("CreateEmployee")]
         [HasPermission("employees.create")]
-        [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<int>>> CreateEmployee([FromForm] CreateEmployeeDto dto)
@@ -70,7 +70,6 @@ namespace TCBackend.Controllers.Employee
                 var p = new DynamicParameters();
                 p.Add("@Username", dto.Username);
                 p.Add("@PasswordHash", passwordHash);
-                p.Add("@EmpCode", dto.EmpCode);
                 p.Add("@FirstName", dto.FirstName);
                 p.Add("@MiddleName", dto.MiddleName);
                 p.Add("@LastName", dto.LastName);
@@ -85,6 +84,9 @@ namespace TCBackend.Controllers.Employee
                 p.Add("@HireDate", dto.HireDate);
                 p.Add("@DesignationId", dto.DesignationId);
                 p.Add("@DepartmentId", dto.DepartmentId);
+                p.Add("@CompanyId", dto.CompanyId);
+                p.Add("@LocationId", dto.LocationId);
+                p.Add("@CanWorkFromHome", dto.CanWorkFromHome);
                 p.Add("@PAN_Encrypted", encryptedPan);
                 p.Add("@Aadhaar_Encrypted", encryptedAadhaar);
                 p.Add("@BankAccount_Encrypted", encryptedBankAccount);
@@ -105,6 +107,11 @@ namespace TCBackend.Controllers.Employee
                     return BadRequest(new ApiResponse<int>(0, message, 0));
                 }
                 int newEmployeeId = p.Get<int>("@NewEmployeeId");
+
+                var newEmpCode = await connection.QuerySingleOrDefaultAsync<string>(
+                    "SELECT EmpCode FROM EmpMaster WHERE UserId = @UserId",
+                    new { UserId = newEmployeeId },
+                    transaction);
 
                 if (dto.Photo != null && dto.Photo.Length > 0)
                 {
@@ -139,7 +146,7 @@ namespace TCBackend.Controllers.Employee
                 }
 
                 transaction.Commit();
-                return Ok(new ApiResponse<int>(1, message, newEmployeeId));
+                return Ok(new ApiResponse<object>(1, message, new { userId = newEmployeeId, empCode = newEmpCode }));
             }
             catch (Exception ex)
             {
@@ -158,38 +165,53 @@ namespace TCBackend.Controllers.Employee
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var employee = await _context.EmpMaster.FirstOrDefaultAsync(e => e.UserId == employeeId);
-                if (employee == null)
+                var connection = _context.Database.GetDbConnection();
+                var dbTransaction = transaction.GetDbTransaction();
+
+                // Pass pre-encrypted values, or null to keep the existing value (SP uses COALESCE/NULLIF).
+                var encryptedPan = string.IsNullOrEmpty(dto.PAN) ? null : _encryptionService.Encrypt(dto.PAN);
+                var encryptedAadhaar = string.IsNullOrEmpty(dto.AadhaarCard) ? null : _encryptionService.Encrypt(dto.AadhaarCard);
+                var encryptedBankAccount = string.IsNullOrEmpty(dto.BankAccountNumber) ? null : _encryptionService.Encrypt(dto.BankAccountNumber);
+
+                var p = new DynamicParameters();
+                p.Add("@UserId", employeeId);
+                p.Add("@FirstName", dto.FirstName);
+                p.Add("@MiddleName", dto.MiddleName);
+                p.Add("@LastName", dto.LastName);
+                p.Add("@FathersName", dto.FathersName);
+                p.Add("@MothersName", dto.MothersName);
+                p.Add("@DateOfBirth", dto.DateOfBirth);
+                p.Add("@HireDate", dto.HireDate);
+                p.Add("@Email", dto.Email);
+                p.Add("@Mobile", dto.Mobile);
+                p.Add("@Gender", dto.Gender);
+                p.Add("@Address", dto.Address);
+                p.Add("@DepartmentId", dto.DepartmentId);
+                p.Add("@DesignationId", dto.DesignationId);
+                p.Add("@CompanyId", dto.CompanyId);
+                p.Add("@LocationId", dto.LocationId);
+                p.Add("@CanWorkFromHome", dto.CanWorkFromHome);
+                p.Add("@PAN_Encrypted", encryptedPan);
+                p.Add("@Aadhaar_Encrypted", encryptedAadhaar);
+                p.Add("@BankAccount_Encrypted", encryptedBankAccount);
+                p.Add("@StatusId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+                p.Add("@Message", dbType: DbType.String, size: 255, direction: ParameterDirection.Output);
+
+                await connection.ExecuteAsync("sp_UpdateEmployeeDetails", p, dbTransaction, commandType: CommandType.StoredProcedure);
+
+                int statusId = p.Get<int>("@StatusId");
+                string message = p.Get<string>("@Message");
+
+                if (statusId != 1)
                 {
-                    return NotFound(new ApiResponse<int>(0, "Employee not found.", 0));
+                    await transaction.RollbackAsync();
+                    return statusId == 0
+                        ? BadRequest(new ApiResponse<int>(0, message, 0))
+                        : StatusCode(500, new ApiResponse<int>(0, message, 0));
                 }
-
-                employee.FirstName = dto.FirstName;
-                employee.MiddleName = dto.MiddleName;
-                employee.LastName = dto.LastName;
-                employee.EmailID = dto.Email;
-                employee.Mobile = dto.Mobile;
-                employee.Gender = dto.Gender;
-                employee.DepartmentId = dto.DepartmentId;
-                employee.DesignationId = dto.DesignationId;
-                employee.Address = dto.Address;
-
-                if (!string.IsNullOrEmpty(dto.PAN))
-                    employee.PAN = _encryptionService.Encrypt(dto.PAN);
-
-                if (!string.IsNullOrEmpty(dto.AadhaarCard))
-                    employee.AadhaarCard = _encryptionService.Encrypt(dto.AadhaarCard);
-
-                if (!string.IsNullOrEmpty(dto.BankAccountNumber))
-                    employee.BankAccountNumber = _encryptionService.Encrypt(dto.BankAccountNumber);
-
-                await _context.SaveChangesAsync();
 
                 if (dto.ReportingManagerIds != null)
                 {
-                    var connection = _context.Database.GetDbConnection();
-                    var dbTransaction = transaction.GetDbTransaction();
-
                     var newManagerIds = dto.ReportingManagerIds.Distinct().ToList();
 
                     var currentManagerIds = await connection.QueryAsync<int>(
@@ -225,7 +247,7 @@ namespace TCBackend.Controllers.Employee
                 }
 
                 await transaction.CommitAsync();
-                return Ok(new ApiResponse<int>(1, "Employee updated successfully.", employeeId));
+                return Ok(new ApiResponse<int>(1, message, employeeId));
             }
             catch (Exception ex)
             {
@@ -370,14 +392,24 @@ namespace TCBackend.Controllers.Employee
                     FirstName = employeeView.FirstName,
                     MiddleName = employeeView.MiddleName,
                     LastName = employeeView.LastName,
+                    FathersName = employeeView.FathersName,
+                    MothersName = employeeView.MothersName,
                     EmailID = employeeView.EmailID,
                     Mobile = employeeView.Mobile,
                     DateOfBirth = employeeView.DateofBirth,
+                    HireDate = employeeView.HireDate,
                     Gender = employeeView.Gender,
                     Address = employeeView.Address,
                     PhotoUrl = await _storageService.GetSecureFileUrlAsync(employeeView.PhotoUrl),
                     DepartmentId = employeeView.DepartmentId,
+                    DepartmentName = employeeView.DepartmentName,
                     DesignationId = employeeView.DesignationId,
+                    DesignationName = employeeView.DesignationTitle,
+                    CompanyId = employeeView.CompanyId,
+                    CompanyName = employeeView.CompanyName,
+                    LocationId = employeeView.LocationId,
+                    LocationName = employeeView.LocationName,
+                    CanWorkFromHome = employeeView.CanWorkFromHome,
                     Status = employeeView.Status,
 
                     PAN = string.IsNullOrEmpty(employeeView.PAN) ? null : _encryptionService.Decrypt(employeeView.PAN),
@@ -386,7 +418,9 @@ namespace TCBackend.Controllers.Employee
 
                     ReportingManagerIds = string.IsNullOrEmpty(employeeView.ManagerIds)
                         ? new List<int>()
-                        : employeeView.ManagerIds.Split(',').Select(int.Parse).ToList()
+                        : employeeView.ManagerIds.Split(',').Select(int.Parse).ToList(),
+
+                    ManagerNames = employeeView.ManagerNames
                 };
 
                 return Ok(new ApiResponse<EmployeeDetailsDto>(1, "Success", dto));

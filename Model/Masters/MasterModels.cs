@@ -22,4 +22,17 @@ namespace TCBackend.Model.Masters
         public string? CompanyName { get; set; }
         public string? CompanyCode { get; set; }
     }
+
+    [Table("HolidayMaster")]
+    public class HolidayMaster
+    {
+        [Key]
+        public int HolidayId { get; set; }
+        [Column(TypeName = "date")]
+        public DateTime HolidayDate { get; set; }
+        public string? HolidayName { get; set; }
+        public int CompanyId { get; set; }
+        public int LocationId { get; set; }
+        public bool IsRestricted { get; set; }
+    }
 }

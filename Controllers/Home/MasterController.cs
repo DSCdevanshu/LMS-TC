@@ -284,5 +284,149 @@ namespace TCBackend.Controllers.Home
                 return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
             }
         }
+
+        // ==================== HOLIDAY CRUD ====================
+
+        [HttpGet("holidays")]
+        [HasPermission("masters.holidays.manage")]
+        [ProducesResponseType(typeof(ApiResponse<List<HolidayListDto>>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<ApiResponse<List<HolidayListDto>>>> GetAllHolidays()
+        {
+            try
+            {
+                var list = await (from h in _context.HolidayMaster
+                                  join c in _context.CompanyMaster on h.CompanyId equals c.CompanyId into hc
+                                  from c in hc.DefaultIfEmpty()
+                                  join l in _context.LocationMaster on h.LocationId equals l.LocationId into hl
+                                  from l in hl.DefaultIfEmpty()
+                                  select new HolidayListDto
+                                  {
+                                      HolidayId = h.HolidayId,
+                                      HolidayDate = h.HolidayDate,
+                                      HolidayName = h.HolidayName,
+                                      CompanyId = h.CompanyId,
+                                      CompanyName = c != null ? c.CompanyName : null,
+                                      LocationId = h.LocationId,
+                                      LocationName = l != null ? l.LocationName : null,
+                                      IsRestricted = h.IsRestricted
+                                  })
+                                  .OrderBy(h => h.HolidayDate)
+                                  .ToListAsync();
+
+                return Ok(new ApiResponse<List<HolidayListDto>>(1, "Success", list));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>(0, $"Error: {ex.Message}", null));
+            }
+        }
+
+        [HttpPost("holidays")]
+        [HasPermission("masters.holidays.manage")]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<ApiResponse<object>>> CreateHoliday([FromBody] HolidayDto dto)
+        {
+            try
+            {
+                if (await _context.HolidayMaster.AnyAsync(h => h.HolidayDate == dto.HolidayDate
+                                                            && h.CompanyId == dto.CompanyId
+                                                            && h.LocationId == dto.LocationId))
+                {
+                    return BadRequest(new ApiResponse<object>(0, $"Holiday on '{dto.HolidayDate:yyyy-MM-dd}' already exists for the selected company and location.", null));
+                }
+
+                var holiday = new HolidayMaster
+                {
+                    HolidayDate = dto.HolidayDate,
+                    HolidayName = dto.HolidayName,
+                    CompanyId = dto.CompanyId,
+                    LocationId = dto.LocationId,
+                    IsRestricted = dto.IsRestricted
+                };
+
+                _context.HolidayMaster.Add(holiday);
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<object>(1, "Holiday created successfully.", new { id = holiday.HolidayId }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
+        }
+
+        [HttpPut("holidays/{id}")]
+        [HasPermission("masters.holidays.manage")]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<ApiResponse<object>>> UpdateHoliday(int id, [FromBody] HolidayDto dto)
+        {
+            try
+            {
+                var holiday = await _context.HolidayMaster.FindAsync(id);
+
+                if (holiday == null)
+                {
+                    return NotFound(new ApiResponse<object>(0, "Holiday not found.", null));
+                }
+
+                if (await _context.HolidayMaster.AnyAsync(h => h.HolidayDate == dto.HolidayDate
+                                                            && h.CompanyId == dto.CompanyId
+                                                            && h.LocationId == dto.LocationId
+                                                            && h.HolidayId != id))
+                {
+                    return BadRequest(new ApiResponse<object>(0, $"Holiday on '{dto.HolidayDate:yyyy-MM-dd}' already exists for the selected company and location.", null));
+                }
+
+                holiday.HolidayDate = dto.HolidayDate;
+                holiday.HolidayName = dto.HolidayName;
+                holiday.CompanyId = dto.CompanyId;
+                holiday.LocationId = dto.LocationId;
+                holiday.IsRestricted = dto.IsRestricted;
+
+                _context.HolidayMaster.Update(holiday);
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<object>(1, "Holiday updated successfully.", null));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
+        }
+
+        [HttpDelete("holidays/{id}")]
+        [HasPermission("masters.holidays.manage")]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<ApiResponse<object>>> DeleteHoliday(int id)
+        {
+            try
+            {
+                var holiday = await _context.HolidayMaster.FindAsync(id);
+
+                if (holiday == null)
+                {
+                    return NotFound(new ApiResponse<object>(0, "Holiday not found.", null));
+                }
+
+                _context.HolidayMaster.Remove(holiday);
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<object>(1, "Holiday deleted successfully.", null));
+            }
+            catch (Exception ex)
+            {
+                if (ex.InnerException != null && ex.InnerException.Message.Contains("REFERENCE constraint"))
+                {
+                    return BadRequest(new ApiResponse<object>(0, "Cannot delete this holiday because it is referenced by other records.", null));
+                }
+                return StatusCode(500, new ApiResponse<object>(0, $"Error: {ex.Message}", null));
+            }
+        }
     }
 }

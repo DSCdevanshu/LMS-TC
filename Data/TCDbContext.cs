@@ -3,6 +3,7 @@ using TCBackend.Dtos.Home;
 using TCBackend.Dtos.LeaveSystem;
 using TCBackend.Dtos.Management;
 using TCBackend.Dtos.Wrappers;
+using TCBackend.Model.Content;
 using TCBackend.Model.Employee;
 using TCBackend.Model.LoginSecurity;
 using TCBackend.Model.Masters;
@@ -80,6 +81,41 @@ namespace TCBackend.Data
             modelBuilder.Entity<SpLeaveRequestResult>().HasNoKey();
             modelBuilder.Entity<LeaveProcessHistory>().HasNoKey();
             modelBuilder.Entity<SpLeaveRequestResultV2>().HasNoKey();
+
+            //-------------Unified Content relationships-------------
+            modelBuilder.Entity<ContentItem>(eb =>
+            {
+                eb.HasOne(c => c.Category)
+                    .WithMany()
+                    .HasForeignKey(c => c.CategoryId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasMany(c => c.Attachments)
+                    .WithOne(a => a.Content)
+                    .HasForeignKey(a => a.ContentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasMany(c => c.Audiences)
+                    .WithOne(a => a.Content)
+                    .HasForeignKey(a => a.ContentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasMany(c => c.Engagements)
+                    .WithOne(e => e.Content)
+                    .HasForeignKey(e => e.ContentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasMany(c => c.Comments)
+                    .WithOne(cm => cm.Content)
+                    .HasForeignKey(cm => cm.ContentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ContentComment>()
+                .HasOne(cm => cm.ParentComment)
+                .WithMany(cm => cm.Replies)
+                .HasForeignKey(cm => cm.ParentCommentId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
 
 
@@ -99,9 +135,18 @@ namespace TCBackend.Data
         public DbSet<PageMaster> PageMaster { get; set; }
         public DbSet<LocationMaster> LocationMaster { get; set; }
         public DbSet<CompanyMaster> CompanyMaster { get; set; }
+        public DbSet<HolidayMaster> HolidayMaster { get; set; }
         public DbSet<SpLeaveRequestResult> SpLeaveRequestResult { get; set; }
         public DbSet<SpLeaveRequestResultV2> SpLeaveRequestResultsV2 { get; set; }
 
         public DbSet<UserCalendarDataDto> sp_GetUserCalendarData { get; set; }
+
+        //-------------Unified Content (Announcement | Policy | Post)-------------
+        public DbSet<ContentCategory> ContentCategory { get; set; }
+        public DbSet<ContentItem> ContentItem { get; set; }
+        public DbSet<ContentAttachment> ContentAttachment { get; set; }
+        public DbSet<ContentAudience> ContentAudience { get; set; }
+        public DbSet<ContentEngagement> ContentEngagement { get; set; }
+        public DbSet<ContentComment> ContentComment { get; set; }
     }
 }
